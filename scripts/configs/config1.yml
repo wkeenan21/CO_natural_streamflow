@@ -1,0 +1,64 @@
+batch_size: 256
+clip_gradient_norm: 1
+clip_targets_to_zero:
+- Q_cfs
+data_dir: C:\Users\willy\Documents\CSU_GIS_Data\CWCB24\data\basins
+dataset: cwcb
+dynamic_inputs:
+- dayl
+- prcp
+- srad_x
+- swe
+- tmax
+- tmin
+- vp
+- eto
+- pr
+- srad_y
+- tmmn
+- tmmx
+- vpd
+epochs: 10
+experiment_name: smallBasins2
+head: regression
+hidden_size: 256
+initial_forget_bias: 3
+learning_rate:
+  0: 1e-2
+  30: 5e-3
+  40: 1e-3
+log_interval: 5
+log_n_figures: 1
+log_tensorboard: true
+loss: MSE
+metrics:
+- NSE
+- RMSE
+- Pearson-r
+model: cudalstm
+num_workers: 8
+optimizer: Adam
+output_activation: linear
+output_dropout: 0.2
+predict_last_n:
+  1D: 1
+run_dir: C:\Users\willy\Documents\CSU_GIS_Data\CWCB24\data\NH_results
+save_weights_every: 1
+seq_length:
+  1D: 365
+static_attributes:
+- area
+target_variables:
+- Q_cfs
+test_basin_file: C:\Users\willy\Documents\CSU_GIS_Data\CWCB24\NH\configs\smallBasins2.txt
+test_end_date: 01/01/2024
+test_start_date: 01/01/2021
+train_basin_file: C:\Users\willy\Documents\CSU_GIS_Data\CWCB24\NH\configs\smallBasins2.txt
+train_end_date: 31/12/2020
+train_start_date: 01/01/2002
+use_frequencies: 1D
+validate_every: 50
+validate_n_random_basins: 11
+validation_basin_file: C:\Users\willy\Documents\CSU_GIS_Data\CWCB24\NH\configs\smallBasins2.txt
+validation_end_date: 31/12/2001
+validation_start_date: 01/01/2001
