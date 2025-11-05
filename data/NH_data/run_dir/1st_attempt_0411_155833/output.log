@@ -1,0 +1,602 @@
+2025-11-04 15:58:33,207: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155833\output.log initialized.
+2025-11-04 15:58:33,210: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155833
+2025-11-04 15:58:33,211: ### Run configurations for 1st_attempt
+2025-11-04 15:58:33,212: batch_size: 256
+2025-11-04 15:58:33,213: clip_gradient_norm: 1
+2025-11-04 15:58:33,213: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 15:58:33,214: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 15:58:33,216: dataset: cwcb
+2025-11-04 15:58:33,217: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 15:58:33,218: epochs: 5
+2025-11-04 15:58:33,219: experiment_name: 1st_attempt
+2025-11-04 15:58:33,221: head: regression
+2025-11-04 15:58:33,222: hidden_size: 256
+2025-11-04 15:58:33,223: initial_forget_bias: 3
+2025-11-04 15:58:33,224: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 15:58:33,225: log_interval: 5
+2025-11-04 15:58:33,226: log_n_figures: 1
+2025-11-04 15:58:33,227: log_tensorboard: True
+2025-11-04 15:58:33,228: loss: MSE
+2025-11-04 15:58:33,229: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 15:58:33,230: model: cudalstm
+2025-11-04 15:58:33,230: num_workers: 8
+2025-11-04 15:58:33,231: optimizer: Adam
+2025-11-04 15:58:33,232: output_activation: linear
+2025-11-04 15:58:33,233: output_dropout: 0.2
+2025-11-04 15:58:33,234: predict_last_n: {'1D': 1}
+2025-11-04 15:58:33,235: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155833
+2025-11-04 15:58:33,236: save_weights_every: 1
+2025-11-04 15:58:33,237: seq_length: {'1D': 365}
+2025-11-04 15:58:33,238: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 15:58:33,239: target_variables: ['Q_cfs']
+2025-11-04 15:58:33,241: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:58:33,242: test_end_date: 2024-12-31 00:00:00
+2025-11-04 15:58:33,243: test_start_date: 2022-01-01 00:00:00
+2025-11-04 15:58:33,244: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:58:33,244: train_end_date: 2021-12-31 00:00:00
+2025-11-04 15:58:33,245: train_start_date: 2000-01-01 00:00:00
+2025-11-04 15:58:33,247: use_frequencies: 1D
+2025-11-04 15:58:33,247: validate_every: 50
+2025-11-04 15:58:33,248: validate_n_random_basins: 11
+2025-11-04 15:58:33,249: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:58:33,250: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 15:58:33,251: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 15:58:33,252: device: cpu
+2025-11-04 15:58:33,252: number_of_basins: 131
+2025-11-04 15:58:33,253: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155833\train_data
+2025-11-04 15:58:33,254: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155833\img_log
+2025-11-04 15:58:33,335: ### Device cpu will be used for training
+2025-11-04 15:58:33,375: Loading basin data into xarray data set.
+2025-11-04 16:00:58,884: Failed to handle request 88 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:00,336: Failed to handle request 93 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:00,759: Failed to handle request 95 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:01,603: Failed to handle request 97 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:01,991: Failed to handle request 99 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:02,655: Failed to handle request 101 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:03,414: Failed to handle request 103 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:03,971: Failed to handle request 105 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:04,300: Failed to handle request 107 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:05,784: Failed to handle request 109 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:05,882: Failed to handle request 110 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:05,967: Failed to handle request 111 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:06,052: Failed to handle request 112 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:08,638: Failed to handle request 114 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:09,310: Failed to handle request 116 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:09,848: Failed to handle request 118 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:10,318: Failed to handle request 120 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:10,562: Failed to handle request 121 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:10,939: Failed to handle request 123 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:11,979: Failed to handle request 125 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:12,387: Failed to handle request 127 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:13,468: Failed to handle request 129 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:14,543: Failed to handle request 131 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:15,726: Failed to handle request 133 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:16,116: Failed to handle request 135 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:16,414: Failed to handle request 137 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:16,631: Failed to handle request 138 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:18,118: Failed to handle request 140 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:18,567: Failed to handle request 142 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:19,810: Failed to handle request 144 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:20,176: Failed to handle request 146 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:20,570: Failed to handle request 148 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:20,857: Failed to handle request 150 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:21,900: Failed to handle request 152 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:01:22,108: Failed to handle request 153 textDocument/documentHighlight DocumentHighlightParams(text_document=TextDocumentIdentifier(uri='file:///c%3A/Users/C830645719/OneDrive%20-%20Colostate/documents/GitHub/CO_natural_streamflow/scripts/data_collection/streamflow.py'), position=75:58, work_done_token=None, partial_result_token=None)
+Traceback (most recent call last):
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 266, in _handle_request
+    self._execute_request(msg_id, handler, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\pygls\protocol\json_rpc.py", line 188, in _execute_request
+    self._send_response(msg_id, handler(params))
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\positron_jedilsp.py", line 830, in positron_highlight
+    return highlight(server, params)
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi_language_server\server.py", line 441, in highlight
+    names = jedi_script.get_references(*jedi_lines, scope="file")
+  File "c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\posit\positron\_vendor\jedi\api\helpers.py", line 484, in wrapper
+    raise ValueError('`column` parameter (%d) is not in a valid range '
+ValueError: `column` parameter (58) is not in a valid range (0-57) for line 76 ("                flow.index = pd.to_datetime(flow['date'])\r\n").
+2025-11-04 16:24:33,715: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162433\output.log initialized.
+2025-11-04 16:24:33,716: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162433
+2025-11-04 16:24:33,717: ### Run configurations for 1st_attempt
+2025-11-04 16:24:33,718: batch_size: 256
+2025-11-04 16:24:33,719: clip_gradient_norm: 1
+2025-11-04 16:24:33,720: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 16:24:33,721: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 16:24:33,721: dataset: cwcb
+2025-11-04 16:24:33,722: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 16:24:33,723: epochs: 5
+2025-11-04 16:24:33,724: experiment_name: 1st_attempt
+2025-11-04 16:24:33,724: head: regression
+2025-11-04 16:24:33,725: hidden_size: 256
+2025-11-04 16:24:33,726: initial_forget_bias: 3
+2025-11-04 16:24:33,727: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 16:24:33,728: log_interval: 5
+2025-11-04 16:24:33,729: log_n_figures: 1
+2025-11-04 16:24:33,730: log_tensorboard: True
+2025-11-04 16:24:33,730: loss: MSE
+2025-11-04 16:24:33,731: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 16:24:33,732: model: cudalstm
+2025-11-04 16:24:33,733: num_workers: 8
+2025-11-04 16:24:33,734: optimizer: Adam
+2025-11-04 16:24:33,735: output_activation: linear
+2025-11-04 16:24:33,736: output_dropout: 0.2
+2025-11-04 16:24:33,737: predict_last_n: {'1D': 1}
+2025-11-04 16:24:33,738: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162433
+2025-11-04 16:24:33,739: save_weights_every: 1
+2025-11-04 16:24:33,740: seq_length: {'1D': 365}
+2025-11-04 16:24:33,741: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 16:24:33,741: target_variables: ['Q_cfs']
+2025-11-04 16:24:33,742: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 16:24:33,743: test_end_date: 2024-12-31 00:00:00
+2025-11-04 16:24:33,745: test_start_date: 2022-01-01 00:00:00
+2025-11-04 16:24:33,746: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 16:24:33,747: train_end_date: 2021-12-31 00:00:00
+2025-11-04 16:24:33,747: train_start_date: 2000-01-01 00:00:00
+2025-11-04 16:24:33,748: use_frequencies: 1D
+2025-11-04 16:24:33,749: validate_every: 50
+2025-11-04 16:24:33,750: validate_n_random_basins: 11
+2025-11-04 16:24:33,751: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 16:24:33,752: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 16:24:33,752: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 16:24:33,754: device: cpu
+2025-11-04 16:24:33,754: number_of_basins: 131
+2025-11-04 16:24:33,755: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162433\train_data
+2025-11-04 16:24:33,756: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162433\img_log
+2025-11-04 16:24:33,759: ### Device cpu will be used for training
+2025-11-04 16:24:33,811: Loading basin data into xarray data set.
+2025-11-04 16:25:26,940: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162526\output.log initialized.
+2025-11-04 16:25:26,941: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162526
+2025-11-04 16:25:26,942: ### Run configurations for 1st_attempt
+2025-11-04 16:25:26,943: batch_size: 256
+2025-11-04 16:25:26,944: clip_gradient_norm: 1
+2025-11-04 16:25:26,946: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 16:25:26,947: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 16:25:26,948: dataset: cwcb
+2025-11-04 16:25:26,949: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 16:25:26,950: epochs: 5
+2025-11-04 16:25:26,951: experiment_name: 1st_attempt
+2025-11-04 16:25:26,951: head: regression
+2025-11-04 16:25:26,952: hidden_size: 256
+2025-11-04 16:25:26,953: initial_forget_bias: 3
+2025-11-04 16:25:26,954: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 16:25:26,955: log_interval: 5
+2025-11-04 16:25:26,956: log_n_figures: 1
+2025-11-04 16:25:26,956: log_tensorboard: True
+2025-11-04 16:25:26,958: loss: MSE
+2025-11-04 16:25:26,959: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 16:25:26,959: model: cudalstm
+2025-11-04 16:25:26,961: num_workers: 8
+2025-11-04 16:25:26,961: optimizer: Adam
+2025-11-04 16:25:26,962: output_activation: linear
+2025-11-04 16:25:26,963: output_dropout: 0.2
+2025-11-04 16:25:26,964: predict_last_n: {'1D': 1}
+2025-11-04 16:25:26,964: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162526
+2025-11-04 16:25:26,965: save_weights_every: 1
+2025-11-04 16:25:26,966: seq_length: {'1D': 365}
+2025-11-04 16:25:26,967: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 16:25:26,967: target_variables: ['Q_cfs']
+2025-11-04 16:25:26,968: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 16:25:26,969: test_end_date: 2024-12-31 00:00:00
+2025-11-04 16:25:26,971: test_start_date: 2022-01-01 00:00:00
+2025-11-04 16:25:26,972: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 16:25:26,973: train_end_date: 2021-12-31 00:00:00
+2025-11-04 16:25:26,974: train_start_date: 2000-01-01 00:00:00
+2025-11-04 16:25:26,974: use_frequencies: 1D
+2025-11-04 16:25:26,975: validate_every: 50
+2025-11-04 16:25:26,976: validate_n_random_basins: 11
+2025-11-04 16:25:26,977: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 16:25:26,978: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 16:25:26,979: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 16:25:26,979: device: cpu
+2025-11-04 16:25:26,981: number_of_basins: 131
+2025-11-04 16:25:26,982: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162526\train_data
+2025-11-04 16:25:26,983: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_162526\img_log
+2025-11-04 16:25:26,986: ### Device cpu will be used for training
+2025-11-04 16:25:33,911: Exiting process with status 0

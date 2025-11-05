@@ -1,0 +1,88 @@
+batch_size: 256
+clip_gradient_norm: 1
+clip_targets_to_zero:
+- Q_cfs
+commit_hash:
+data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+dataset: cwcb
+device: cpu
+dynamic_inputs:
+- prcp
+- srad
+- swe
+- tmax
+- tmin
+- vp
+- eto
+- vpd
+epochs: 5
+experiment_name: 1st_attempt
+head: regression
+hidden_size: 256
+img_log_dir: C:\Users\C830645719\OneDrive - 
+  Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_163408\img_log
+initial_forget_bias: 3
+learning_rate:
+  0: 0.01
+  30: 0.005
+  40: 0.001
+log_interval: 5
+log_n_figures: 1
+log_tensorboard: true
+loss: MSE
+metrics:
+- NSE
+- RMSE
+- Pearson-r
+model: cudalstm
+num_workers: 8
+number_of_basins: 131
+optimizer: Adam
+output_activation: linear
+output_dropout: 0.2
+package_version: 1.11.0
+predict_last_n:
+  1D: 1
+run_dir: C:\Users\C830645719\OneDrive - 
+  Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_163408
+save_weights_every: 1
+seed: 383889
+seq_length:
+  1D: 365
+static_attributes:
+- area
+- dis_m3_pyr
+- run_mm_syr
+- inu_pc_smx
+- gwt_cm_sav
+- ele_mt_sav
+- ele_mt_smx
+- ele_mt_smn
+- slp_dg_sav
+- sgr_dk_sav
+- ari_ix_sav
+- snw_pc_syr
+- wet_pc_sg1
+- cly_pc_sav
+- slt_pc_sav
+- snd_pc_sav
+- swc_pc_syr
+target_variables:
+- Q_cfs
+test_basin_file: C:\Users\C830645719\OneDrive - 
+  Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+test_end_date: 31/12/2024
+test_start_date: 01/01/2022
+train_basin_file: C:\Users\C830645719\OneDrive - 
+  Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+train_dir: C:\Users\C830645719\OneDrive - 
+  Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_163408\train_data
+train_end_date: 31/12/2021
+train_start_date: 01/01/2000
+use_frequencies: 1D
+validate_every: 50
+validate_n_random_basins: 11
+validation_basin_file: C:\Users\C830645719\OneDrive - 
+  Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+validation_end_date: 31/12/2001
+validation_start_date: 01/01/2001

@@ -1,0 +1,196 @@
+2025-11-04 15:47:19,312: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_154719\output.log initialized.
+2025-11-04 15:47:19,315: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_154719
+2025-11-04 15:47:19,316: ### Run configurations for 1st_attempt
+2025-11-04 15:47:19,317: batch_size: 256
+2025-11-04 15:47:19,317: clip_gradient_norm: 1
+2025-11-04 15:47:19,320: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 15:47:19,320: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 15:47:19,320: dataset: cwcb
+2025-11-04 15:47:19,320: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 15:47:19,320: epochs: 5
+2025-11-04 15:47:19,320: experiment_name: 1st_attempt
+2025-11-04 15:47:19,320: head: regression
+2025-11-04 15:47:19,327: hidden_size: 256
+2025-11-04 15:47:19,328: initial_forget_bias: 3
+2025-11-04 15:47:19,329: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 15:47:19,333: log_interval: 5
+2025-11-04 15:47:19,333: log_n_figures: 1
+2025-11-04 15:47:19,333: log_tensorboard: True
+2025-11-04 15:47:19,333: loss: MSE
+2025-11-04 15:47:19,333: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 15:47:19,333: model: cudalstm
+2025-11-04 15:47:19,333: num_workers: 8
+2025-11-04 15:47:19,333: optimizer: Adam
+2025-11-04 15:47:19,333: output_activation: linear
+2025-11-04 15:47:19,344: output_dropout: 0.2
+2025-11-04 15:47:19,345: predict_last_n: {'1D': 1}
+2025-11-04 15:47:19,346: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_154719
+2025-11-04 15:47:19,347: save_weights_every: 1
+2025-11-04 15:47:19,348: seq_length: {'1D': 365}
+2025-11-04 15:47:19,349: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 15:47:19,350: target_variables: ['Q_cfs']
+2025-11-04 15:47:19,350: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:47:19,350: test_end_date: 2024-12-31 00:00:00
+2025-11-04 15:47:19,350: test_start_date: 2022-01-01 00:00:00
+2025-11-04 15:47:19,350: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:47:19,350: train_end_date: 2021-12-31 00:00:00
+2025-11-04 15:47:19,355: train_start_date: 2000-01-01 00:00:00
+2025-11-04 15:47:19,355: use_frequencies: 1D
+2025-11-04 15:47:19,355: validate_every: 50
+2025-11-04 15:47:19,355: validate_n_random_basins: 11
+2025-11-04 15:47:19,355: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:47:19,361: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 15:47:19,363: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 15:47:19,365: device: cpu
+2025-11-04 15:47:19,367: number_of_basins: 131
+2025-11-04 15:47:19,367: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_154719\train_data
+2025-11-04 15:47:19,372: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_154719\img_log
+2025-11-04 15:47:19,437: ### Device cpu will be used for training
+2025-11-04 15:51:09,993: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155109\output.log initialized.
+2025-11-04 15:51:09,994: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155109
+2025-11-04 15:51:09,995: ### Run configurations for 1st_attempt
+2025-11-04 15:51:09,996: batch_size: 256
+2025-11-04 15:51:09,997: clip_gradient_norm: 1
+2025-11-04 15:51:09,998: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 15:51:09,999: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 15:51:09,999: dataset: cwcb
+2025-11-04 15:51:10,000: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 15:51:10,000: epochs: 5
+2025-11-04 15:51:10,002: experiment_name: 1st_attempt
+2025-11-04 15:51:10,003: head: regression
+2025-11-04 15:51:10,003: hidden_size: 256
+2025-11-04 15:51:10,005: initial_forget_bias: 3
+2025-11-04 15:51:10,006: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 15:51:10,006: log_interval: 5
+2025-11-04 15:51:10,007: log_n_figures: 1
+2025-11-04 15:51:10,008: log_tensorboard: True
+2025-11-04 15:51:10,010: loss: MSE
+2025-11-04 15:51:10,010: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 15:51:10,010: model: cudalstm
+2025-11-04 15:51:10,011: num_workers: 8
+2025-11-04 15:51:10,012: optimizer: Adam
+2025-11-04 15:51:10,013: output_activation: linear
+2025-11-04 15:51:10,014: output_dropout: 0.2
+2025-11-04 15:51:10,015: predict_last_n: {'1D': 1}
+2025-11-04 15:51:10,016: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155109
+2025-11-04 15:51:10,017: save_weights_every: 1
+2025-11-04 15:51:10,018: seq_length: {'1D': 365}
+2025-11-04 15:51:10,018: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 15:51:10,019: target_variables: ['Q_cfs']
+2025-11-04 15:51:10,020: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:51:10,021: test_end_date: 2024-12-31 00:00:00
+2025-11-04 15:51:10,022: test_start_date: 2022-01-01 00:00:00
+2025-11-04 15:51:10,023: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:51:10,024: train_end_date: 2021-12-31 00:00:00
+2025-11-04 15:51:10,025: train_start_date: 2000-01-01 00:00:00
+2025-11-04 15:51:10,025: use_frequencies: 1D
+2025-11-04 15:51:10,027: validate_every: 50
+2025-11-04 15:51:10,028: validate_n_random_basins: 11
+2025-11-04 15:51:10,029: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:51:10,030: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 15:51:10,031: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 15:51:10,031: device: cpu
+2025-11-04 15:51:10,032: number_of_basins: 131
+2025-11-04 15:51:10,033: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155109\train_data
+2025-11-04 15:51:10,034: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155109\img_log
+2025-11-04 15:51:10,037: ### Device cpu will be used for training
+2025-11-04 15:57:36,362: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155736\output.log initialized.
+2025-11-04 15:57:36,363: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155736
+2025-11-04 15:57:36,364: ### Run configurations for 1st_attempt
+2025-11-04 15:57:36,365: batch_size: 256
+2025-11-04 15:57:36,365: clip_gradient_norm: 1
+2025-11-04 15:57:36,366: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 15:57:36,367: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 15:57:36,368: dataset: cwcb
+2025-11-04 15:57:36,368: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 15:57:36,369: epochs: 5
+2025-11-04 15:57:36,370: experiment_name: 1st_attempt
+2025-11-04 15:57:36,372: head: regression
+2025-11-04 15:57:36,373: hidden_size: 256
+2025-11-04 15:57:36,374: initial_forget_bias: 3
+2025-11-04 15:57:36,375: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 15:57:36,376: log_interval: 5
+2025-11-04 15:57:36,376: log_n_figures: 1
+2025-11-04 15:57:36,377: log_tensorboard: True
+2025-11-04 15:57:36,378: loss: MSE
+2025-11-04 15:57:36,379: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 15:57:36,380: model: cudalstm
+2025-11-04 15:57:36,381: num_workers: 8
+2025-11-04 15:57:36,382: optimizer: Adam
+2025-11-04 15:57:36,383: output_activation: linear
+2025-11-04 15:57:36,385: output_dropout: 0.2
+2025-11-04 15:57:36,386: predict_last_n: {'1D': 1}
+2025-11-04 15:57:36,387: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155736
+2025-11-04 15:57:36,388: save_weights_every: 1
+2025-11-04 15:57:36,389: seq_length: {'1D': 365}
+2025-11-04 15:57:36,390: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 15:57:36,391: target_variables: ['Q_cfs']
+2025-11-04 15:57:36,392: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:57:36,393: test_end_date: 2024-12-31 00:00:00
+2025-11-04 15:57:36,393: test_start_date: 2022-01-01 00:00:00
+2025-11-04 15:57:36,394: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:57:36,394: train_end_date: 2021-12-31 00:00:00
+2025-11-04 15:57:36,396: train_start_date: 2000-01-01 00:00:00
+2025-11-04 15:57:36,397: use_frequencies: 1D
+2025-11-04 15:57:36,398: validate_every: 50
+2025-11-04 15:57:36,398: validate_n_random_basins: 11
+2025-11-04 15:57:36,399: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:57:36,400: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 15:57:36,401: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 15:57:36,402: device: cpu
+2025-11-04 15:57:36,403: number_of_basins: 131
+2025-11-04 15:57:36,404: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155736\train_data
+2025-11-04 15:57:36,405: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155736\img_log
+2025-11-04 15:57:36,408: ### Device cpu will be used for training
+2025-11-04 15:57:36,460: Loading basin data into xarray data set.
+2025-11-04 15:58:04,310: Logging to C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155804\output.log initialized.
+2025-11-04 15:58:04,311: ### Folder structure created at C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155804
+2025-11-04 15:58:04,311: ### Run configurations for 1st_attempt
+2025-11-04 15:58:04,312: batch_size: 256
+2025-11-04 15:58:04,313: clip_gradient_norm: 1
+2025-11-04 15:58:04,314: clip_targets_to_zero: ['Q_cfs']
+2025-11-04 15:58:04,315: data_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\filled
+2025-11-04 15:58:04,315: dataset: cwcb
+2025-11-04 15:58:04,316: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-04 15:58:04,317: epochs: 5
+2025-11-04 15:58:04,318: experiment_name: 1st_attempt
+2025-11-04 15:58:04,319: head: regression
+2025-11-04 15:58:04,320: hidden_size: 256
+2025-11-04 15:58:04,321: initial_forget_bias: 3
+2025-11-04 15:58:04,322: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-04 15:58:04,323: log_interval: 5
+2025-11-04 15:58:04,324: log_n_figures: 1
+2025-11-04 15:58:04,325: log_tensorboard: True
+2025-11-04 15:58:04,325: loss: MSE
+2025-11-04 15:58:04,326: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-04 15:58:04,327: model: cudalstm
+2025-11-04 15:58:04,328: num_workers: 8
+2025-11-04 15:58:04,329: optimizer: Adam
+2025-11-04 15:58:04,329: output_activation: linear
+2025-11-04 15:58:04,330: output_dropout: 0.2
+2025-11-04 15:58:04,331: predict_last_n: {'1D': 1}
+2025-11-04 15:58:04,332: run_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155804
+2025-11-04 15:58:04,332: save_weights_every: 1
+2025-11-04 15:58:04,333: seq_length: {'1D': 365}
+2025-11-04 15:58:04,333: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-04 15:58:04,334: target_variables: ['Q_cfs']
+2025-11-04 15:58:04,335: test_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:58:04,336: test_end_date: 2024-12-31 00:00:00
+2025-11-04 15:58:04,336: test_start_date: 2022-01-01 00:00:00
+2025-11-04 15:58:04,337: train_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:58:04,338: train_end_date: 2021-12-31 00:00:00
+2025-11-04 15:58:04,339: train_start_date: 2000-01-01 00:00:00
+2025-11-04 15:58:04,340: use_frequencies: 1D
+2025-11-04 15:58:04,341: validate_every: 50
+2025-11-04 15:58:04,342: validate_n_random_basins: 11
+2025-11-04 15:58:04,343: validation_basin_file: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\scripts\configs\flow25_gages.txt
+2025-11-04 15:58:04,344: validation_end_date: 2001-12-31 00:00:00
+2025-11-04 15:58:04,345: validation_start_date: 2001-01-01 00:00:00
+2025-11-04 15:58:04,346: device: cpu
+2025-11-04 15:58:04,347: number_of_basins: 131
+2025-11-04 15:58:04,348: train_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155804\train_data
+2025-11-04 15:58:04,348: img_log_dir: C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\NH_data\run_dir\1st_attempt_0411_155804\img_log
+2025-11-04 15:58:04,352: ### Device cpu will be used for training
+2025-11-04 15:58:12,497: Exiting process with status 0
+2025-11-04 15:58:12,829: Task was destroyed but it is pending!
+task: <Task pending name='Task-2' coro=<Kernel.poll_control_queue() running at c:\Program Files\Positron\resources\app\extensions\positron-python\python_files\lib\ipykernel\py3\ipykernel\kernelbase.py:304> wait_for=<Future finished result=<Future at 0x...state=pending>> cb=[_chain_future.<locals>._call_set_state() at C:\Users\C830645719\.conda\envs\neuralhydrology\lib\asyncio\futures.py:392]>

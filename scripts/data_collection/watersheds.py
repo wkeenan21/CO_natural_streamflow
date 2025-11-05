@@ -9,34 +9,15 @@ from os.path import join
 import ee
 from shapely.geometry import box, Point
 import dataretrieval.nwis as nwis
-
-def fix_gage_series(s: pd.Series) -> pd.Series:
-    def normalize_val(x):
-        # Convert everything to string first
-        val = str(x).strip()
-
-        # Case 1: If contains any alphabetic characters, leave as-is
-        if any(c.isalpha() for c in val):
-            return val
-
-        # Case 2: If it's numeric (digits only)
-        if val.isdigit():
-            if len(val) <= 7:
-                return val.zfill(8)  # pad to 8 digits
-            else:
-                return val  # leave ≥ 9 digits as-is
-
-        # Otherwise return as-is (covers weird cases like NaN, decimals, etc.)
-        return val
-
-    return s.apply(normalize_val).astype(str)
+import sys
 
 cwd = os.getcwd()
+sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
+from special_functions import *
 
 # read watersheds from flow25, gage points
 flow25 = gpd.read_file(join(cwd, r'data\CSU_Flow25\site_coordinates_20250731.shp'))
 flow25['gauge_id'] = fix_gage_series(flow25['gage_used'])
-flow25.loc[74, 'gauge_id'] = '402114105350101'
 
 """
 Make a box
@@ -204,7 +185,28 @@ co_df = gpd.read_file(join(cwd, r'data\shapefiles\wsheds_co_gages.shp')).to_crs(
 
 cols = ['gauge_id', 'geometry']
 
-df = pd.concat([co_df[cols], camels[cols], flow25[cols]])
+df = pd.concat([camels[cols], flow25[cols]])
 df = df.sort_values(by='gauge_id')
 df = df.drop_duplicates(subset=['gauge_id'])
 df.to_file(join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_2.shp'))
+
+def write_lines_to_file(strings, filename):
+    """
+    Write a list of strings to a text file, one per line.
+    
+    Parameters
+    ----------
+    strings : list of str
+        The lines you want to write.
+    filename : str
+        The path to the output text file.
+    """
+    with open(filename, "w", encoding="utf-8") as f:
+        for s in strings:
+            f.write(s + "\n")
+
+# write the flow25 gages to a txt file
+write_lines_to_file(list(flow25['gauge_id']), os.path.join(cwd, r'scripts/configs/flow25_gages.txt'))
+write_lines_to_file(list(camels))
+
+
