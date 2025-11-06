@@ -1,0 +1,286 @@
+2025-11-06 12:53:56,280: Logging to data\NH_data\run_dir\1st_attempt_0611_125356\output.log initialized.
+2025-11-06 12:53:56,307: ### Folder structure created at data\NH_data\run_dir\1st_attempt_0611_125356
+2025-11-06 12:53:56,308: ### Run configurations for 1st_attempt
+2025-11-06 12:53:56,309: batch_size: 256
+2025-11-06 12:53:56,310: clip_gradient_norm: 1
+2025-11-06 12:53:56,311: clip_targets_to_zero: ['Q_cfs']
+2025-11-06 12:53:56,312: data_dir: data\NH_data\filled
+2025-11-06 12:53:56,314: dataset: cwcb
+2025-11-06 12:53:56,316: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-06 12:53:56,317: epochs: 5
+2025-11-06 12:53:56,318: experiment_name: 1st_attempt
+2025-11-06 12:53:56,318: head: regression
+2025-11-06 12:53:56,321: hidden_size: 256
+2025-11-06 12:53:56,322: initial_forget_bias: 3
+2025-11-06 12:53:56,323: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-06 12:53:56,324: log_interval: 5
+2025-11-06 12:53:56,325: log_n_figures: 1
+2025-11-06 12:53:56,326: log_tensorboard: True
+2025-11-06 12:53:56,326: loss: MSE
+2025-11-06 12:53:56,327: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-06 12:53:56,328: model: cudalstm
+2025-11-06 12:53:56,328: num_workers: 8
+2025-11-06 12:53:56,330: optimizer: Adam
+2025-11-06 12:53:56,331: output_activation: linear
+2025-11-06 12:53:56,332: output_dropout: 0.2
+2025-11-06 12:53:56,333: predict_last_n: {'1D': 1}
+2025-11-06 12:53:56,334: run_dir: data\NH_data\run_dir\1st_attempt_0611_125356
+2025-11-06 12:53:56,335: save_weights_every: 1
+2025-11-06 12:53:56,336: seq_length: {'1D': 365}
+2025-11-06 12:53:56,337: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-06 12:53:56,338: target_variables: ['Q_cfs']
+2025-11-06 12:53:56,339: test_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 12:53:56,341: test_end_date: 2024-12-31 00:00:00
+2025-11-06 12:53:56,342: test_start_date: 2022-01-01 00:00:00
+2025-11-06 12:53:56,342: train_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 12:53:56,344: train_end_date: 2021-12-31 00:00:00
+2025-11-06 12:53:56,345: train_start_date: 2000-01-01 00:00:00
+2025-11-06 12:53:56,345: use_frequencies: 1D
+2025-11-06 12:53:56,346: validate_every: 50
+2025-11-06 12:53:56,348: validate_n_random_basins: 11
+2025-11-06 12:53:56,349: validation_basin_file: configs\flow25_gages.txt
+2025-11-06 12:53:56,351: validation_end_date: 2001-12-31 00:00:00
+2025-11-06 12:53:56,351: validation_start_date: 2001-01-01 00:00:00
+2025-11-06 12:53:56,352: number_of_basins: 131
+2025-11-06 12:53:56,353: train_dir: data\NH_data\run_dir\1st_attempt_0611_125356\train_data
+2025-11-06 12:53:56,354: img_log_dir: data\NH_data\run_dir\1st_attempt_0611_125356\img_log
+2025-11-06 12:53:56,420: ### Device cpu will be used for training
+2025-11-06 12:56:05,538: Logging to data\NH_data\run_dir\1st_attempt_0611_125605\output.log initialized.
+2025-11-06 12:56:05,539: ### Folder structure created at data\NH_data\run_dir\1st_attempt_0611_125605
+2025-11-06 12:56:05,540: ### Run configurations for 1st_attempt
+2025-11-06 12:56:05,541: batch_size: 256
+2025-11-06 12:56:05,541: clip_gradient_norm: 1
+2025-11-06 12:56:05,544: clip_targets_to_zero: ['Q_cfs']
+2025-11-06 12:56:05,545: data_dir: data\NH_data\filled
+2025-11-06 12:56:05,546: dataset: camels
+2025-11-06 12:56:05,547: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-06 12:56:05,548: epochs: 5
+2025-11-06 12:56:05,549: experiment_name: 1st_attempt
+2025-11-06 12:56:05,550: head: regression
+2025-11-06 12:56:05,551: hidden_size: 256
+2025-11-06 12:56:05,551: initial_forget_bias: 3
+2025-11-06 12:56:05,552: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-06 12:56:05,553: log_interval: 5
+2025-11-06 12:56:05,554: log_n_figures: 1
+2025-11-06 12:56:05,555: log_tensorboard: True
+2025-11-06 12:56:05,556: loss: MSE
+2025-11-06 12:56:05,557: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-06 12:56:05,558: model: cudalstm
+2025-11-06 12:56:05,559: num_workers: 8
+2025-11-06 12:56:05,559: optimizer: Adam
+2025-11-06 12:56:05,560: output_activation: linear
+2025-11-06 12:56:05,561: output_dropout: 0.2
+2025-11-06 12:56:05,562: predict_last_n: {'1D': 1}
+2025-11-06 12:56:05,564: run_dir: data\NH_data\run_dir\1st_attempt_0611_125605
+2025-11-06 12:56:05,565: save_weights_every: 1
+2025-11-06 12:56:05,566: seq_length: {'1D': 365}
+2025-11-06 12:56:05,566: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-06 12:56:05,567: target_variables: ['Q_cfs']
+2025-11-06 12:56:05,568: test_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 12:56:05,570: test_end_date: 2024-12-31 00:00:00
+2025-11-06 12:56:05,571: test_start_date: 2022-01-01 00:00:00
+2025-11-06 12:56:05,573: train_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 12:56:05,574: train_end_date: 2021-12-31 00:00:00
+2025-11-06 12:56:05,575: train_start_date: 2000-01-01 00:00:00
+2025-11-06 12:56:05,576: use_frequencies: 1D
+2025-11-06 12:56:05,577: validate_every: 50
+2025-11-06 12:56:05,578: validate_n_random_basins: 11
+2025-11-06 12:56:05,579: validation_basin_file: configs\flow25_gages.txt
+2025-11-06 12:56:05,580: validation_end_date: 2001-12-31 00:00:00
+2025-11-06 12:56:05,582: validation_start_date: 2001-01-01 00:00:00
+2025-11-06 12:56:05,583: number_of_basins: 131
+2025-11-06 12:56:05,584: train_dir: data\NH_data\run_dir\1st_attempt_0611_125605\train_data
+2025-11-06 12:56:05,585: img_log_dir: data\NH_data\run_dir\1st_attempt_0611_125605\img_log
+2025-11-06 12:56:05,589: ### Device cpu will be used for training
+2025-11-06 13:00:11,864: Logging to data\NH_data\run_dir\1st_attempt_0611_130011\output.log initialized.
+2025-11-06 13:00:11,865: ### Folder structure created at data\NH_data\run_dir\1st_attempt_0611_130011
+2025-11-06 13:00:11,866: ### Run configurations for 1st_attempt
+2025-11-06 13:00:11,868: batch_size: 256
+2025-11-06 13:00:11,869: clip_gradient_norm: 1
+2025-11-06 13:00:11,871: clip_targets_to_zero: ['Q_cfs']
+2025-11-06 13:00:11,872: data_dir: data\NH_data\filled
+2025-11-06 13:00:11,873: dataset: CWCB
+2025-11-06 13:00:11,874: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-06 13:00:11,875: epochs: 5
+2025-11-06 13:00:11,875: experiment_name: 1st_attempt
+2025-11-06 13:00:11,876: head: regression
+2025-11-06 13:00:11,877: hidden_size: 256
+2025-11-06 13:00:11,878: initial_forget_bias: 3
+2025-11-06 13:00:11,879: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-06 13:00:11,880: log_interval: 5
+2025-11-06 13:00:11,881: log_n_figures: 1
+2025-11-06 13:00:11,882: log_tensorboard: True
+2025-11-06 13:00:11,883: loss: MSE
+2025-11-06 13:00:11,884: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-06 13:00:11,885: model: cudalstm
+2025-11-06 13:00:11,886: num_workers: 8
+2025-11-06 13:00:11,886: optimizer: Adam
+2025-11-06 13:00:11,888: output_activation: linear
+2025-11-06 13:00:11,889: output_dropout: 0.2
+2025-11-06 13:00:11,890: predict_last_n: {'1D': 1}
+2025-11-06 13:00:11,891: run_dir: data\NH_data\run_dir\1st_attempt_0611_130011
+2025-11-06 13:00:11,892: save_weights_every: 1
+2025-11-06 13:00:11,893: seq_length: {'1D': 365}
+2025-11-06 13:00:11,893: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-06 13:00:11,894: target_variables: ['Q_cfs']
+2025-11-06 13:00:11,895: test_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:00:11,896: test_end_date: 2024-12-31 00:00:00
+2025-11-06 13:00:11,896: test_start_date: 2022-01-01 00:00:00
+2025-11-06 13:00:11,897: train_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:00:11,898: train_end_date: 2021-12-31 00:00:00
+2025-11-06 13:00:11,899: train_start_date: 2000-01-01 00:00:00
+2025-11-06 13:00:11,900: use_frequencies: 1D
+2025-11-06 13:00:11,901: validate_every: 50
+2025-11-06 13:00:11,902: validate_n_random_basins: 11
+2025-11-06 13:00:11,903: validation_basin_file: configs\flow25_gages.txt
+2025-11-06 13:00:11,904: validation_end_date: 2001-12-31 00:00:00
+2025-11-06 13:00:11,905: validation_start_date: 2001-01-01 00:00:00
+2025-11-06 13:00:11,906: number_of_basins: 131
+2025-11-06 13:00:11,906: train_dir: data\NH_data\run_dir\1st_attempt_0611_130011\train_data
+2025-11-06 13:00:11,908: img_log_dir: data\NH_data\run_dir\1st_attempt_0611_130011\img_log
+2025-11-06 13:00:11,911: ### Device cpu will be used for training
+2025-11-06 13:05:18,332: Logging to data\NH_data\run_dir\1st_attempt_0611_130518\output.log initialized.
+2025-11-06 13:05:18,333: ### Folder structure created at data\NH_data\run_dir\1st_attempt_0611_130518
+2025-11-06 13:05:18,333: ### Run configurations for 1st_attempt
+2025-11-06 13:05:18,335: batch_size: 256
+2025-11-06 13:05:18,335: clip_gradient_norm: 1
+2025-11-06 13:05:18,336: clip_targets_to_zero: ['Q_cfs']
+2025-11-06 13:05:18,337: data_dir: data\NH_data\filled
+2025-11-06 13:05:18,338: dataset: CWCB
+2025-11-06 13:05:18,339: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-06 13:05:18,339: epochs: 5
+2025-11-06 13:05:18,340: experiment_name: 1st_attempt
+2025-11-06 13:05:18,341: head: regression
+2025-11-06 13:05:18,342: hidden_size: 256
+2025-11-06 13:05:18,343: initial_forget_bias: 3
+2025-11-06 13:05:18,343: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-06 13:05:18,344: log_interval: 5
+2025-11-06 13:05:18,345: log_n_figures: 1
+2025-11-06 13:05:18,346: log_tensorboard: True
+2025-11-06 13:05:18,347: loss: MSE
+2025-11-06 13:05:18,348: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-06 13:05:18,348: model: cudalstm
+2025-11-06 13:05:18,349: num_workers: 8
+2025-11-06 13:05:18,350: optimizer: Adam
+2025-11-06 13:05:18,351: output_activation: linear
+2025-11-06 13:05:18,351: output_dropout: 0.2
+2025-11-06 13:05:18,354: predict_last_n: {'1D': 1}
+2025-11-06 13:05:18,354: run_dir: data\NH_data\run_dir\1st_attempt_0611_130518
+2025-11-06 13:05:18,355: save_weights_every: 1
+2025-11-06 13:05:18,356: seq_length: {'1D': 365}
+2025-11-06 13:05:18,357: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-06 13:05:18,358: target_variables: ['Q_cfs']
+2025-11-06 13:05:18,359: test_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:05:18,360: test_end_date: 2024-12-31 00:00:00
+2025-11-06 13:05:18,361: test_start_date: 2022-01-01 00:00:00
+2025-11-06 13:05:18,362: train_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:05:18,363: train_end_date: 2021-12-31 00:00:00
+2025-11-06 13:05:18,363: train_start_date: 2000-01-01 00:00:00
+2025-11-06 13:05:18,364: use_frequencies: 1D
+2025-11-06 13:05:18,365: validate_every: 50
+2025-11-06 13:05:18,366: validate_n_random_basins: 11
+2025-11-06 13:05:18,367: validation_basin_file: configs\flow25_gages.txt
+2025-11-06 13:05:18,368: validation_end_date: 2001-12-31 00:00:00
+2025-11-06 13:05:18,370: validation_start_date: 2001-01-01 00:00:00
+2025-11-06 13:05:18,371: number_of_basins: 131
+2025-11-06 13:05:18,374: train_dir: data\NH_data\run_dir\1st_attempt_0611_130518\train_data
+2025-11-06 13:05:18,376: img_log_dir: data\NH_data\run_dir\1st_attempt_0611_130518\img_log
+2025-11-06 13:05:18,381: ### Device cpu will be used for training
+2025-11-06 13:11:23,969: Logging to data\NH_data\run_dir\1st_attempt_0611_131123\output.log initialized.
+2025-11-06 13:11:23,970: ### Folder structure created at data\NH_data\run_dir\1st_attempt_0611_131123
+2025-11-06 13:11:23,970: ### Run configurations for 1st_attempt
+2025-11-06 13:11:23,971: batch_size: 256
+2025-11-06 13:11:23,972: clip_gradient_norm: 1
+2025-11-06 13:11:23,972: clip_targets_to_zero: ['Q_cfs']
+2025-11-06 13:11:23,973: data_dir: data\NH_data\filled
+2025-11-06 13:11:23,974: dataset: cwcb
+2025-11-06 13:11:23,975: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-06 13:11:23,976: epochs: 5
+2025-11-06 13:11:23,977: experiment_name: 1st_attempt
+2025-11-06 13:11:23,979: head: regression
+2025-11-06 13:11:23,980: hidden_size: 256
+2025-11-06 13:11:23,981: initial_forget_bias: 3
+2025-11-06 13:11:23,982: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-06 13:11:23,982: log_interval: 5
+2025-11-06 13:11:23,983: log_n_figures: 1
+2025-11-06 13:11:23,983: log_tensorboard: True
+2025-11-06 13:11:23,984: loss: MSE
+2025-11-06 13:11:23,985: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-06 13:11:23,986: model: cudalstm
+2025-11-06 13:11:23,987: num_workers: 8
+2025-11-06 13:11:23,987: optimizer: Adam
+2025-11-06 13:11:23,988: output_activation: linear
+2025-11-06 13:11:23,989: output_dropout: 0.2
+2025-11-06 13:11:23,990: predict_last_n: {'1D': 1}
+2025-11-06 13:11:23,991: run_dir: data\NH_data\run_dir\1st_attempt_0611_131123
+2025-11-06 13:11:23,992: save_weights_every: 1
+2025-11-06 13:11:23,992: seq_length: {'1D': 365}
+2025-11-06 13:11:23,993: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-06 13:11:23,994: target_variables: ['Q_cfs']
+2025-11-06 13:11:23,996: test_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:11:23,997: test_end_date: 2024-12-31 00:00:00
+2025-11-06 13:11:23,998: test_start_date: 2022-01-01 00:00:00
+2025-11-06 13:11:23,999: train_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:11:24,000: train_end_date: 2021-12-31 00:00:00
+2025-11-06 13:11:24,000: train_start_date: 2000-01-01 00:00:00
+2025-11-06 13:11:24,001: use_frequencies: 1D
+2025-11-06 13:11:24,002: validate_every: 50
+2025-11-06 13:11:24,003: validate_n_random_basins: 11
+2025-11-06 13:11:24,003: validation_basin_file: configs\flow25_gages.txt
+2025-11-06 13:11:24,004: validation_end_date: 2001-12-31 00:00:00
+2025-11-06 13:11:24,005: validation_start_date: 2001-01-01 00:00:00
+2025-11-06 13:11:24,006: number_of_basins: 131
+2025-11-06 13:11:24,007: train_dir: data\NH_data\run_dir\1st_attempt_0611_131123\train_data
+2025-11-06 13:11:24,008: img_log_dir: data\NH_data\run_dir\1st_attempt_0611_131123\img_log
+2025-11-06 13:11:24,011: ### Device cpu will be used for training
+2025-11-06 13:11:24,126: Loading basin data into xarray data set.
+2025-11-06 13:11:29,835: Create lookup table and convert to pytorch tensor
+2025-11-06 13:13:59,353: Logging to data\NH_data\run_dir\1st_attempt_0611_131359\output.log initialized.
+2025-11-06 13:13:59,354: ### Folder structure created at data\NH_data\run_dir\1st_attempt_0611_131359
+2025-11-06 13:13:59,355: ### Run configurations for 1st_attempt
+2025-11-06 13:13:59,356: batch_size: 256
+2025-11-06 13:13:59,357: clip_gradient_norm: 1
+2025-11-06 13:13:59,358: clip_targets_to_zero: ['Q_cfs']
+2025-11-06 13:13:59,359: data_dir: data\NH_data\filled
+2025-11-06 13:13:59,360: dataset: cwcb
+2025-11-06 13:13:59,360: dynamic_inputs: ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+2025-11-06 13:13:59,362: epochs: 5
+2025-11-06 13:13:59,363: experiment_name: 1st_attempt
+2025-11-06 13:13:59,364: head: regression
+2025-11-06 13:13:59,364: hidden_size: 256
+2025-11-06 13:13:59,365: initial_forget_bias: 3
+2025-11-06 13:13:59,366: learning_rate: {0: 0.01, 30: 0.005, 40: 0.001}
+2025-11-06 13:13:59,367: log_interval: 5
+2025-11-06 13:13:59,368: log_n_figures: 1
+2025-11-06 13:13:59,368: log_tensorboard: True
+2025-11-06 13:13:59,369: loss: MSE
+2025-11-06 13:13:59,371: metrics: ['NSE', 'RMSE', 'Pearson-r']
+2025-11-06 13:13:59,371: model: cudalstm
+2025-11-06 13:13:59,372: num_workers: 8
+2025-11-06 13:13:59,373: optimizer: Adam
+2025-11-06 13:13:59,374: output_activation: linear
+2025-11-06 13:13:59,374: output_dropout: 0.2
+2025-11-06 13:13:59,375: predict_last_n: {'1D': 1}
+2025-11-06 13:13:59,376: run_dir: data\NH_data\run_dir\1st_attempt_0611_131359
+2025-11-06 13:13:59,377: save_weights_every: 1
+2025-11-06 13:13:59,377: seq_length: {'1D': 365}
+2025-11-06 13:13:59,378: static_attributes: ['area', 'dis_m3_pyr', 'run_mm_syr', 'inu_pc_smx', 'gwt_cm_sav', 'ele_mt_sav', 'ele_mt_smx', 'ele_mt_smn', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'snw_pc_syr', 'wet_pc_sg1', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'swc_pc_syr']
+2025-11-06 13:13:59,379: target_variables: ['Q_cfs']
+2025-11-06 13:13:59,380: test_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:13:59,381: test_end_date: 2024-12-31 00:00:00
+2025-11-06 13:13:59,382: test_start_date: 2022-01-01 00:00:00
+2025-11-06 13:13:59,383: train_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:13:59,384: train_end_date: 2021-12-31 00:00:00
+2025-11-06 13:13:59,385: train_start_date: 2000-01-01 00:00:00
+2025-11-06 13:13:59,386: use_frequencies: 1D
+2025-11-06 13:13:59,386: validate_every: 50
+2025-11-06 13:13:59,388: validate_n_random_basins: 11
+2025-11-06 13:13:59,388: validation_basin_file: scripts\configs\flow25_gages.txt
+2025-11-06 13:13:59,389: validation_end_date: 2001-12-31 00:00:00
+2025-11-06 13:13:59,390: validation_start_date: 2001-01-01 00:00:00
+2025-11-06 13:13:59,391: number_of_basins: 131
+2025-11-06 13:13:59,391: train_dir: data\NH_data\run_dir\1st_attempt_0611_131359\train_data
+2025-11-06 13:13:59,392: img_log_dir: data\NH_data\run_dir\1st_attempt_0611_131359\img_log
+2025-11-06 13:13:59,441: ### Device cpu will be used for training
+2025-11-06 13:13:59,481: Loading basin data into xarray data set.
+2025-11-06 13:14:03,353: Create lookup table and convert to pytorch tensor

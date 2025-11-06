@@ -2,6 +2,7 @@ batch_size: 256
 clip_gradient_norm: 1
 clip_targets_to_zero:
 - Q_cfs
+commit_hash: cd01d00
 data_dir: data\NH_data\filled
 dataset: cwcb
 dynamic_inputs:
@@ -17,11 +18,12 @@ epochs: 5
 experiment_name: 1st_attempt
 head: regression
 hidden_size: 256
+img_log_dir: data\NH_data\run_dir\1st_attempt_0611_131123\img_log
 initial_forget_bias: 3
 learning_rate:
-  0: 1e-2
-  30: 5e-3
-  40: 1e-3
+  0: 0.01
+  30: 0.005
+  40: 0.001
 log_interval: 5
 log_n_figures: 1
 log_tensorboard: true
@@ -32,44 +34,48 @@ metrics:
 - Pearson-r
 model: cudalstm
 num_workers: 8
+number_of_basins: 131
 optimizer: Adam
 output_activation: linear
 output_dropout: 0.2
+package_version: 1.12.0
 predict_last_n:
   1D: 1
-run_dir: data\NH_data\run_dir
+run_dir: data\NH_data\run_dir\1st_attempt_0611_131123
 save_weights_every: 1
+seed: 180551
 seq_length:
   1D: 365
 static_attributes:
 - area
-- dis_m3_pyr # natural discharge per year
-- run_mm_syr # land surface runoff
-- inu_pc_smx # inundation extent annual mean
-- gwt_cm_sav # groundwater table depth cm
-- ele_mt_sav # elevation mean
-- ele_mt_smx # elevation max
-- ele_mt_smn # elevation min
-- slp_dg_sav # average slope
-- sgr_dk_sav # stream gradient
-- ari_ix_sav # aridity index
-- snw_pc_syr # snow cover extent
-- wet_pc_sg1 # wetland extent (all classes: lakes, rivers, wetlands, etc.)
-- cly_pc_sav # percent clay
-- slt_pc_sav # percent silt
-- snd_pc_sav # percent sand
-- swc_pc_syr # soil water content
+- dis_m3_pyr
+- run_mm_syr
+- inu_pc_smx
+- gwt_cm_sav
+- ele_mt_sav
+- ele_mt_smx
+- ele_mt_smn
+- slp_dg_sav
+- sgr_dk_sav
+- ari_ix_sav
+- snw_pc_syr
+- wet_pc_sg1
+- cly_pc_sav
+- slt_pc_sav
+- snd_pc_sav
+- swc_pc_syr
 target_variables:
 - Q_cfs
 test_basin_file: scripts\configs\flow25_gages.txt
 test_end_date: 31/12/2024
 test_start_date: 01/01/2022
 train_basin_file: scripts\configs\flow25_gages.txt
+train_dir: data\NH_data\run_dir\1st_attempt_0611_131123\train_data
 train_end_date: 31/12/2021
 train_start_date: 01/01/2000
 use_frequencies: 1D
 validate_every: 50
 validate_n_random_basins: 11
-validation_basin_file: scripts\configs\flow25_gages.txt
+validation_basin_file: configs\flow25_gages.txt
 validation_end_date: 31/12/2001
 validation_start_date: 01/01/2001

@@ -1,0 +1,118 @@
+attribute_means:
+  area: 266.88708418007633
+  ari_ix_sav: 64.6094310342748
+  cly_pc_sav: 12.89428732516794
+  dis_m3_pyr: 1.5055801526717556
+  ele_mt_sav: 2750.4245409702294
+  ele_mt_smn: 2234.8256208213743
+  ele_mt_smx: 3556.7452395427485
+  gwt_cm_sav: 664.7610715557252
+  inu_pc_smx: 0.11404072774045802
+  run_mm_syr: 65.66993247010687
+  sgr_dk_sav: 293.56219102396943
+  slp_dg_sav: 113.54864546139696
+  slt_pc_sav: 33.6628676319084
+  snd_pc_sav: 53.49542727770992
+  snw_pc_syr: 32.5374622367939
+  swc_pc_syr: 54.017067919770994
+  wet_pc_sg1: 8.185684174312977
+attribute_stds:
+  area: 306.19281249132206
+  ari_ix_sav: 22.968481600299167
+  cly_pc_sav: 2.8186328876401014
+  dis_m3_pyr: 3.4108695190843106
+  ele_mt_sav: 530.6960172265278
+  ele_mt_smn: 421.62506276534424
+  ele_mt_smx: 729.873555227461
+  gwt_cm_sav: 167.6759155432244
+  inu_pc_smx: 0.4442517023728648
+  run_mm_syr: 58.646557291543054
+  sgr_dk_sav: 127.66931258518352
+  slp_dg_sav: 50.35773293553012
+  slt_pc_sav: 2.2399941715114515
+  snd_pc_sav: 4.2472992999360875
+  snw_pc_syr: 15.2489204115949
+  swc_pc_syr: 15.64419865607354
+  wet_pc_sg1: 12.602622443415642
+xarray_feature_scale:
+  coords: {}
+  attrs: {}
+  dims: {}
+  data_vars:
+    Q_cfs:
+      dims: []
+      attrs: {}
+      data: 157.79676818847656
+    eto:
+      dims: []
+      attrs: {}
+      data: 1.7848095893859863
+    prcp:
+      dims: []
+      attrs: {}
+      data: 4.209020137786865
+    srad:
+      dims: []
+      attrs: {}
+      data: 145.0087890625
+    swe:
+      dims: []
+      attrs: {}
+      data: 118.1333236694336
+    tmax:
+      dims: []
+      attrs: {}
+      data: 9.786593437194824
+    tmin:
+      dims: []
+      attrs: {}
+      data: 8.47519588470459
+    vp:
+      dims: []
+      attrs: {}
+      data: 294.06854248046875
+    vpd:
+      dims: []
+      attrs: {}
+      data: 0.501049816608429
+xarray_feature_center:
+  coords: {}
+  attrs: {}
+  dims: {}
+  data_vars:
+    Q_cfs:
+      dims: []
+      attrs: {}
+      data: 42.501853942871094
+    eto:
+      dims: []
+      attrs: {}
+      data: 3.1077752113342285
+    prcp:
+      dims: []
+      attrs: {}
+      data: 1.8026340007781982
+    srad:
+      dims: []
+      attrs: {}
+      data: 413.7301330566406
+    swe:
+      dims: []
+      attrs: {}
+      data: 84.04656219482422
+    tmax:
+      dims: []
+      attrs: {}
+      data: 11.07939624786377
+    tmin:
+      dims: []
+      attrs: {}
+      data: -2.1591567993164062
+    vp:
+      dims: []
+      attrs: {}
+      data: 510.0238952636719
+    vpd:
+      dims: []
+      attrs: {}
+      data: 0.6628791093826294
