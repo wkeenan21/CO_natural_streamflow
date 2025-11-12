@@ -7,6 +7,9 @@ import time
 cwd = os.getcwd()
 sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
 
+with open(os.path.join(cwd, r'scripts/configs/flow25_gages.txt'), "r") as f:
+    flow25gages = f.read().splitlines()
+
 wsheds = gpd.read_file(os.path.join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_3.shp'))
 wsheds = wsheds.to_crs("EPSG:5070")
 
@@ -30,6 +33,14 @@ for csv in os.listdir(gage_dir):
         area = wsheds[wsheds['gauge_id'] == gage]['area'].iloc[0]
         df['Q_mmd'] = df['Q_cfs'] * (0.0283168 * 86400) / (area * 1000)
 
-        df.to_csv(os.path.join(gage_dir, csv), index=False)
+                # gap fill
+        vars = ['Q_mmd', 'Q_cfs', 'prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+        for var in vars:
+            df[var] = df[var].interpolate(limit=90)
+
+    #     df.to_csv(os.path.join(gage_dir, csv), index=False)
+
+    if gage in flow25gages:
+        df.to_csv(os.path.join(cwd, 'data/NH_data/flow25', csv))
         
 print('done')
