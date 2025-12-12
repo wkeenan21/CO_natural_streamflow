@@ -56,3 +56,19 @@ def remove_holes(geom):
         return max(parts, key=lambda a: a.area)  # keep largest
     else:
         return geom
+
+
+def write_lines_to_file(strings, filename):
+    """
+    Write a list of strings to a text file, one per line.
+    
+    Parameters
+    ----------
+    strings : list of str
+        The lines you want to write.
+    filename : str
+        The path to the output text file.
+    """
+    with open(filename, "w", encoding="utf-8") as f:
+        for s in strings:
+            f.write(s + "\n")

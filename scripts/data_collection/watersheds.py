@@ -190,23 +190,8 @@ df = df.sort_values(by='gauge_id')
 df = df.drop_duplicates(subset=['gauge_id'])
 df.to_file(join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_2.shp'))
 
-def write_lines_to_file(strings, filename):
-    """
-    Write a list of strings to a text file, one per line.
-    
-    Parameters
-    ----------
-    strings : list of str
-        The lines you want to write.
-    filename : str
-        The path to the output text file.
-    """
-    with open(filename, "w", encoding="utf-8") as f:
-        for s in strings:
-            f.write(s + "\n")
-
 # write the flow25 gages to a txt file
 write_lines_to_file(list(flow25['gauge_id']), os.path.join(cwd, r'scripts/configs/flow25_gages.txt'))
-write_lines_to_file(list(camels))
+write_lines_to_file(list(camels['gauge_id']) + list(flow25['gauge_id']), os.path.join(cwd, r'scripts/configs/flow25_camels_gages.txt'))
 
 

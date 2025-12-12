@@ -3,6 +3,7 @@ import geopandas as gpd
 import os
 import sys
 import time
+import numpy as np
 
 cwd = os.getcwd()
 sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
@@ -13,10 +14,12 @@ with open(os.path.join(cwd, r'scripts/configs/flow25_gages.txt'), "r") as f:
 wsheds = gpd.read_file(os.path.join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_3.shp'))
 wsheds = wsheds.to_crs("EPSG:5070")
 
-gage_dir = os.path.join(cwd, r'data/NH_data/filled')
+filled_gage_dir = os.path.join(cwd, r'data/NH_data/filled')
+unfilled_gage_dir = os.path.join(cwd, r'data/NH_data/unfilled')
 
-for csv in os.listdir(gage_dir):
-    file_path = os.path.join(gage_dir, csv)
+for csv in os.listdir(unfilled_gage_dir):
+
+    file_path = os.path.join(unfilled_gage_dir, csv)
     if csv != 'basinCharacteristics.csv':
         now = time.time()
         last_modified = os.path.getmtime(file_path)
@@ -33,14 +36,27 @@ for csv in os.listdir(gage_dir):
         area = wsheds[wsheds['gauge_id'] == gage]['area'].iloc[0]
         df['Q_mmd'] = df['Q_cfs'] * (0.0283168 * 86400) / (area * 1000)
 
-                # gap fill
-        vars = ['Q_mmd', 'Q_cfs', 'prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
+        # gap fill climate data
+        vars = ['prcp', 'srad', 'swe', 'tmax', 'tmin', 'vp', 'eto', 'vpd']
         for var in vars:
             df[var] = df[var].interpolate(limit=90)
 
-    #     df.to_csv(os.path.join(gage_dir, csv), index=False)
+        # save this in unfilled to fix the mmd
+        df.to_csv(os.path.join(unfilled_gage_dir, csv), index=False)
 
-    if gage in flow25gages:
-        df.to_csv(os.path.join(cwd, 'data/NH_data/flow25', csv))
+        # record streamflow before gap filling, gap fill
+        vars = ['Q_mmd', 'Q_cfs']
+        for var in vars:
+            df[f'{var}_prefill'] = df[var]
+            df[var] = df[var].interpolate(method='linear', limit=90)
+
+        df['filledDates'] = np.where(df[f'{var}_prefill'].isna() & df[var].notna(), True, False)
+
+        df.to_csv(os.path.join(filled_gage_dir, csv), index=False)
+
+        print(gage, 'done')
+
+        if gage in flow25gages:
+            df.to_csv(os.path.join(cwd, 'data/NH_data/flow25', csv))
         
 print('done')
