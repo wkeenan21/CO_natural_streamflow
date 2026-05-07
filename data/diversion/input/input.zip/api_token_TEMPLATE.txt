@@ -1,0 +1,7 @@
+# NOTE: you must enter a valid CDSS API token in order to download all of the CDSS diversion data
+# NOTE: request an API token at https://dwr.state.co.us/rest/get/help
+# NOTE: create a copy of this file and rename it "api_token.txt" in the same directory
+# NOTE: in the copied file, replace text within quotes below with your api token string, keeping the quotes
+# NOTE: delete these commented lines in the copied file
+# NOTE: the copied file "api_token.txt" containing your api token information is not synced to the git repo
+{"apiKey": "copy_API_token_string_within_these_quotes"}
