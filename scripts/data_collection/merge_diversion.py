@@ -252,6 +252,7 @@ flow_ratios = {}
 
 for gage_id in wsheds['gage_used'].unique():
     try:
+        print(gage_id)
         # Load the newly created CSVs
         file_path = os.path.join(cwd, fr"data\NH_data\w_diversion\{gage_id}.csv")
         df = pd.read_csv(file_path)
