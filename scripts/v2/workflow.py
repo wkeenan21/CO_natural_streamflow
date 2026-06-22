@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from shapely.strtree import STRtree
 from pynhd import NLDI
-import cdsspy
 nldi = NLDI()
 from pygeohydro import NWIS
 nwis = NWIS()
@@ -27,9 +26,6 @@ import rasterio
 # 4 download climate reanlysis data
 # 5 harmonize it
 
-# parameters
-#Date range of interest
-dates = ("2003-10-01", "2025-09-30")
 cwd = os.getcwd()
 
 def diagnose_gage_quality(df, completion_threshold=0.90):
@@ -95,19 +91,16 @@ def diagnose_gage_quality(df, completion_threshold=0.90):
     print(f"Diagnostic complete. {good_gages_count}/{df.shape[1]} gages have at least 10 quality years.")
 
 
-def extract_all_snodas(gdf, date_range, snodas_folder, gage_col='gage'):
+def extract_all_snodas(gdf, date_range, snodas_folder, export_folder, gage_col='gage'):
     """
-    Opens each daily CONUS SNODAS file exactly once and extracts SWE sums 
-    for all watersheds simultaneously.
+    Opens daily CONUS SNODAS files and extracts SWE sums for all watersheds.
+    Saves a separate CSV file for each calendar year in the date range.
     """
-    # 1. Get a list of all target dates
     start_date, end_date = date_range
     date_list = pd.date_range(start=start_date, end=end_date, freq='D')
     
-    # 2. Open just one file to get the exact SNODAS CRS, then reproject your whole GDF
-    # SNODAS typically uses an unprojected cylindrical or custom NSIDC grid
-
-    first_date_str = date_list[0].strftime('%Y%m%dd')
+    # 1. Get the exact SNODAS CRS from the first file and reproject the GDF
+    first_date_str = date_list[0].strftime('%Y%m%d')
     sample_file = os.path.join(snodas_folder, f"SNODAS_SWE_{first_date_str}.tif")
     
     if os.path.exists(sample_file):
@@ -117,33 +110,50 @@ def extract_all_snodas(gdf, date_range, snodas_folder, gage_col='gage'):
     else:
         raise FileNotFoundError(f"Could not find sample SNODAS file: {sample_file}")
 
-    # Dictionary to hold arrays: { date: [sum_gage1, sum_gage2, ...] }
-    master_swe_data = {}
+    os.makedirs(export_folder, exist_ok=True)
+
+    # Initialize container for the current year's data
+    current_year = date_list[0].year
+    year_swe_data = {}
     
-    print(f"Extracting SNODAS data across {len(date_list)} days for all watersheds...")
-    for date_val in date_list:
-        date_str = date_val.strftime('%Y%m%dd')
+    print(f"Extracting SNODAS data across {len(date_list)} days...")
+    
+    for i, date_val in enumerate(date_list):
+        # If we've hit a new year, export the accumulated data from the previous year
+        if date_val.year != current_year:
+            _export_yearly_csv(year_swe_data, current_year, gdf[gage_col], export_folder)
+            # Reset for the new year
+            current_year = date_val.year
+            year_swe_data = {}
+
+        print(date_val.strftime('%Y-%m-%d'))
+        date_str = date_val.strftime('%Y%m%d')
         filename = f"SNODAS_SWE_{date_str}.tif"
         file_path = os.path.join(snodas_folder, filename)
         
         if os.path.exists(file_path):
-            # zonal_stats extracts data for ALL polygons in the GDF simultaneously 
-            # while the file is held open in a low-level C-buffer.
-            stats = zonal_stats(gdf_reproj, file_path, stats="sum", nodata=np.nan)
-            # Extract just the raw sum values into a list matching GDF order
-            master_swe_data[date_val] = [s['sum'] if s['sum'] is not None else np.nan for s in stats]
+            stats = zonal_stats(gdf_reproj, file_path, stats="sum", nodata=-9999)
+            year_swe_data[date_val] = [s['sum'] if s['sum'] is not None else np.nan for s in stats]
         else:
-            # Fallback for missing tracking dates
-            master_swe_data[date_val] = [np.nan] * len(gdf_reproj)
-            
-    # Convert to a master lookup dataframe
-    # Rows = DatetimeIndex, Columns = Gage IDs
-    snodas_master_df = pd.DataFrame(master_swe_data, index=gdf[gage_col]).T
-    snodas_master_df.index.name = 'time'
-    
-    return snodas_master_df
+            print(f'missing {file_path} filling na')
+            year_swe_data[date_val] = [np.nan] * len(gdf_reproj)
 
-print("SNODAS COLLECTED")
+    # Export the final year's data after the loop finishes
+    if year_swe_data:
+        _export_yearly_csv(year_swe_data, current_year, gdf[gage_col], export_folder)
+
+    print("SNODAS PROCESSING COMPLETE. ALL FILES EXPORTED.")
+
+
+def _export_yearly_csv(year_data, year, gage_ids, export_folder):
+    """Helper function to format and save the yearly data to CSV."""
+    print(f"--- Exporting CSV for year {year} ---")
+    df = pd.DataFrame(year_data, index=gage_ids).T
+    df.index.name = 'date'
+    
+    export_path = os.path.join(export_folder, f"SNODAS_SWE_{year}.csv")
+    df.to_csv(export_path)
+    print(f"Saved: {export_path}")
 
 
 def prepare_dem_inputs(raw_dem_path, output_folder):
@@ -266,8 +276,8 @@ def delineate_watersheds_preprocessed(fdir_path, acc_path, points_gdf, gage_col=
             print(f"Failed to delineate gage {gage_id}: {e}")
             
     # Build final GeoDataFrame output
-    result_gdf = gpd.GeoDataFrame(watershed_records, crs=dem_crs)
-    return result_gdf
+    #result_gdf = gpd.GeoDataFrame(watershed_records, crs=dem_crs)
+    return watershed_records
 
 
 def remove_nested_basins(gdf, area_col=None):
@@ -382,7 +392,11 @@ def fix_gage_id(id_val):
     if len(id_str) == 7 and id_str.isdigit():
         return id_str.zfill(8)
 
+    if 'USGS-' in id_str:
+        id_str = id_str.replace('USGS-', '')
+
     return id_str
+
 ################## STEP 1 #####################
 
 # This step searchs the Ucol watershed for USGS gages and finds point locations
@@ -437,21 +451,18 @@ print(f"{len(pps)} gages fall within the basin boundary")
 gages_gdf = pps.set_crs("EPSG:4326")
 gage_ids = gages_gdf['gage'].to_list()
 
-#Save to file
-gages_gdf.to_file(join(cwd, "ucol_gages.gpkg"), driver="GPKG")
-print(gages_gdf.head())
 
 
-flow = NWIS.get_streamflow(gage_ids, dates, freq="dv") # this takes time
-print(flow.shape)   # (n_days, n_stations)
- # filter them
-flow_f = filter_gages_by_quality(flow)
+# flow = NWIS.get_streamflow(gage_ids, dates, freq="dv") # this takes time
+# print(flow.shape)   # (n_days, n_stations)
+#  # filter them
+# flow_f = filter_gages_by_quality(flow)
 
-pattern = r"USGS-(\d+)"
-gage_ids = [
-    re.search(pattern, col).group(1) if re.search(pattern, col) else col 
-    for col in flow_f.columns
-]
+# pattern = r"USGS-(\d+)"
+# gage_ids = [
+#     re.search(pattern, col).group(1) if re.search(pattern, col) else col 
+#     for col in flow_f.columns
+# ]
 
 ###################### STEP 2: Delineate watersheds from NLDI #####################
 nldi  = NLDI()
@@ -469,26 +480,21 @@ basins = pd.concat(basins)
 
 ############# REMOVE NESTED BASINS ##############
 
-# just headwaters
-basins.geometry = basins.geometry.to_crs(3857)
-basins['gage'] = basins.index
-headwaters = remove_nested_basins(basins)
-headwaters.explore()
-headwaters.to_file(os.path.join(cwd, r'data\shapefiles\UCOL_headwaters.shp'))
-
-flow_f2 = flow[headwaters.gage.to_list()]
-
-# TODO make this delineation work
-
+# manually delineate the ones that NLDI didn't get
 manual_delineate_list = gages_gdf[gages_gdf['gage'].isin(no_work)]
 dem_path = os.path.join(cwd, r'data\terrain\dem_ucol_30m.tif')
 terrain_folder = os.path.join(cwd, r'data\terrain\dem_ucol')
 
 # Run the raw data once and save the states
-filled_path, fdir_path, acc_path = prepare_dem_inputs(
-    raw_dem_path=dem_path, 
-    output_folder=terrain_folder
-)
+filled_path = os.path.join(cwd, r'data\terrain\dem_ucol\dem_filled.tif')
+acc_path = os.path.join(cwd, r'data\terrain\dem_ucol\flow_accumulation.tif')
+fdir_path = os.path.join(cwd, r'data\terrain\dem_ucol\flow_direction.tif')
+
+if not os.path.exists(acc_path):
+    filled_path, fdir_path, acc_path = prepare_dem_inputs(
+        raw_dem_path=dem_path, 
+        output_folder=terrain_folder
+    )
 
 # Step 2: Pass those paths into your delineation routine whenever needed
 watershed_polygons_gdf = delineate_watersheds_preprocessed(
@@ -498,22 +504,53 @@ watershed_polygons_gdf = delineate_watersheds_preprocessed(
     gage_col='gage'
 )
 
-#### NOTE TO SELF ####
-# Seems like most of the no work list is canals or gages that only measure water quality (no cfs)
+man_delin = gpd.GeoDataFrame().from_dict(watershed_polygons_gdf)
+
+# drop the multipolygon
+man_delin['geometry'] = man_delin['geometry'].apply(
+    lambda x: x[0] if isinstance(x, np.ndarray) else x
+)
+
+# Now set the geometry
+man_delin = man_delin.set_geometry('geometry')
+man_delin = man_delin.set_crs(4326)
 
 basins.geometry = basins.geometry.to_crs(4326)
+basins['gage'] = basins.index
+basins = pd.concat([basins, man_delin])
+basins['gage'] = basins.index
+basins['gage'] = basins['gage'].apply(fix_gage_id)
+basins['gage'] = basins.index
 
-import os
-import geopandas as gpd
-import pandas as pd
+
+# just headwaters
+headwaters = remove_nested_basins(basins)
+headwaters.explore()
+headwaters_path = os.path.join(cwd, r'data\shapefiles\UCOL_headwaters_sheds.gpkg')
+headwaters.to_file(headwaters_path, driver='GPKG')
+headwaters_path2 = os.path.join(cwd, r'data\shapefiles\UCOL_headwaters_sheds.gpkg')
+headwaters.to_file(headwaters_path2)
+headwaters = gpd.read_file(headwaters_path)
+
+# Save to file
+gages_headwaters = gages_gdf[gages_gdf.index.isin(headwaters['gage'])]
+gages_headwaters.to_file(join(cwd, r"data\shapefiles\UCOL_headwater_gages.gpkg"), driver="GPKG")
+
+# add in camels
+# maybeee
+
+# maybe later we will grab data for these
+parents = basins[~basins.gage.isin(headwaters.gage)]
+
+
+#### NOTE TO SELF ####
+# Seems like most of the no work list is canals or gages that only measure water quality (no cfs)
 import pygridmet as gridmet
 import rioxarray
 from shapely.geometry import mapping
 
-basins['gage'] = basins.index
-
-gdf = basins
-date_range = dates
+gdf = headwaters
+date_range = ("2018-10-01", "2019-09-30")
 gage_col='gage'
     
 # Variables requested from GRIDMET service
@@ -525,7 +562,23 @@ sum_vars = ['pet', 'pr']
 
 # 1. Run the SNODAS extraction ONCE up front
 snodas_folder = r"N:\Research\Kampf\Private\KeenanW\SNODAS"
-snodas_lookup = extract_all_snodas(gdf, date_range, snodas_folder, gage_col)
+snodas_export_folder = r'N:\Research\Kampf\Private\KeenanW\SNODAS\processed'
+extract_all_snodas(gdf, date_range, snodas_folder, snodas_export_folder, gage_col)
+
+snodas_dfs = []
+years = list(range(pd.to_datetime(date_range[0]).year, pd.to_datetime(date_range[1]).year + 1))
+for year in years:
+    snodas_dfs.append(pd.read_csv(os.path.join(snodas_export_folder, f'SNODAS_SWE_{year}.csv')))
+
+snodas_lookup = pd.concat(snodas_dfs)
+snodas_lookup['time'] = pd.to_datetime(snodas_lookup['time'])
+snodas_lookup = snodas_lookup.rename(columns={'time':'date'})
+snodas_lookup = snodas_lookup.set_index('date')
+
+# Get all streamflow
+flow = NWIS.get_streamflow(gdf['gage'].to_list(), date_range, freq="dv")
+flow.index = flow.index.normalize()
+flow.index = flow.index.tz_localize(None)
 
 # Loop over each individual watershed
 for idx, row in gdf.iterrows():
@@ -545,7 +598,7 @@ for idx, row in gdf.iterrows():
     
     # 2. Write spatial dimensions to ensure rioxarray can parse coordinates
     if "rio" not in ds.dims:
-        ds = ds.rio.write_crs(ds.crs)
+        ds = ds.rio.write_crs(gdf.crs)
         
     # 3. Clip the bounding box netCDF precisely down to the polygon edge mask
     # geometry selection ensures we don't include exterior square cells
@@ -572,33 +625,26 @@ for idx, row in gdf.iterrows():
     
     # Clean up headers to show aggregation style explicitly (Optional)
     rename_dict = {v: f"{v}_mean" for v in mean_vars}
+    rename_dict['time'] = 'date'
     rename_dict.update({v: f"{v}_sum" for v in sum_vars})
-    final_df = gr_df.rename(columns=rename_dict)
+    gr_df = gr_df.rename(columns=rename_dict)
 
     # Set the time index
-    final_df = final_df.set_index('time')
+    gr_df = gr_df.set_index('date')
     
     # EXTRACTION FIX: Instead of opening files, instantly pull the column from memory!
     # Pull the pre-calculated time series matching this specific gage ID
     gage_swe_series = snodas_lookup[row[gage_col]] 
     
     # Map the series back to the main dataframe
-    gr_df = gr_df.merge(gage_swe_series, left_on='time', right_index=True, how='left')
-    gr_df = gr_df.rename(columns={row[gage_col]: 'swe_sum'})
+    gr_df['swe'] = gage_swe_series
+    gr_df = gr_df.rename(columns={'swe':'swe_sum'})
 
+    # get streamflow
+    flow_series = flow[f'USGS-{gage_id}']
+    gr_df['Q_cfs'] = flow_series
 
-
-
-
-
-
-
-
-
-
-
-
-
+    gr_df.to_csv(fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\unfilled\{gage_id}.csv')
 
 
 

@@ -115,8 +115,8 @@ destination = r"N:\Research\Kampf\Private\KeenanW\SNODAS"
 
 
 # Alternative strategy to generate a sequential block scale:
-start_date = datetime.date(2003, 10, 3)
-days_to_extract = [start_date + datetime.timedelta(days=x) for x in range(8292)] # 90 straight days
+start_date = datetime.date(2003, 10, 1)
+days_to_extract = [start_date + datetime.timedelta(days=x) for x in range(1)] # 90 straight days
 
 download_and_convert_snodas(days_to_extract, destination)
 
