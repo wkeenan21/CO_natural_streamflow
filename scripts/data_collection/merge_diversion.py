@@ -6,6 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 # take a look at diversions
 
+ncwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow'
+
 def df_to_geodataframe(
     df: pd.DataFrame,
     lat_col: str = "lat",
@@ -62,7 +64,7 @@ cwd = os.getcwd()
 
 # DIVERSIONS
 # COLUMN = siteID
-dvrs = gpd.read_file(os.path.join(cwd, r"data\diversion\input\input.zip\ucrb_diversion_master_table.csv"))
+dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
 dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
 
 dvrs_intra = dvrs[dvrs['siteUse']=='intrabasin'].copy()
@@ -76,10 +78,10 @@ dvrs = pd.concat([dvrs, dvrs_intra])
 #dvrs.to_file(r"data\shapefiles\ucrb_diversion_master_table.shp")
 
 # WATERSHEDS
-# gageID column = gage_used
+# gageID column = gage
 
-wsheds = gpd.read_file(os.path.join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_3.shp')).to_crs(dvrs.crs)
-wsheds['gage_used'] = wsheds['gauge_id']
+wsheds = gpd.read_file(os.path.join(ncwd, r'data\shapefiles\UCOL_headwaters_sheds.shp')).to_crs(dvrs.crs)
+
 # DIRECTORY OF CSVS FOR STREAMFLOW
 # FILE NAME FORMAT = gageId.csv
 # flow column = Q_cfs
@@ -103,10 +105,10 @@ joined = gpd.sjoin(dvrs, wsheds, how="inner", predicate="within")
 dvrsFlow['Date'] = pd.to_datetime(dvrsFlow['Date'])
 
 # 3. Process each watershed
-for gage_id in wsheds['gage_used'].unique():
+for gage_id in wsheds['gage'].unique():
     
     # Identify siteIDs for diversions located in this specific watershed
-    target_diversions = joined[joined['gage_used'] == gage_id]['siteID'].unique()
+    target_diversions = joined[joined['gage'] == gage_id]['siteID'].unique()
     
     # Path to the existing streamflow file
     flow_file_path = os.path.join(flowDir, f"{gage_id}.csv")
@@ -158,6 +160,9 @@ for gage_id in wsheds['gage_used'].unique():
                 on='date', 
                 how='inner'
             )
+
+            if len(combined_df) < 1:
+                raise Exception('merge failed')
 
             combined_df['Q_cfs_nat'] = combined_df['Q_cfs'] - combined_df['Q_cfs_cu']
         else:
@@ -221,7 +226,7 @@ plot_watershed_flows(df, gage, sdate='2019-01-01')
 imports = []
 # gages where consumptive use is higher than natural flows
 overallocated = []
-for gage_id in wsheds['gage_used'].unique():
+for gage_id in wsheds['gage'].unique():
     try:
         df = pd.read_csv(os.path.join(cwd, fr"data\NH_data\w_diversion\{gage_id}.csv"))
         test = df['Q_cfs_nat']
@@ -244,13 +249,13 @@ def fix_gage_id(id_val):
 
     return id_str
 
-# Apply the logic to the gage_used column
-wsheds['gage_used'] = wsheds['gage_used'].apply(fix_gage_id)
-wsheds['gage_used'] = np.where(wsheds['gage_used'].str.contains('E+', regex=False), wsheds['usgs_id'], wsheds['gage_used']) # the pesky long ones
+# Apply the logic to the gage column
+wsheds['gage'] = wsheds['gage'].apply(fix_gage_id)
+wsheds['gage'] = np.where(wsheds['gage'].str.contains('E+', regex=False), wsheds['usgs_id'], wsheds['gage']) # the pesky long ones
 
 flow_ratios = {}
 
-for gage_id in wsheds['gage_used'].unique():
+for gage_id in wsheds['gage'].unique():
     try:
         print(gage_id)
         # Load the newly created CSVs
@@ -274,7 +279,7 @@ for gage_id in wsheds['gage_used'].unique():
         print(f"Error processing {gage_id}: {e}")
 
 # Map the results back to the GeoDataFrame
-wsheds['flow_ratio_pct'] = wsheds['gage_used'].map(flow_ratios)
+wsheds['flow_ratio_pct'] = wsheds['gage'].map(flow_ratios)
 
 # --- MAP THE RESULTS ---
 import matplotlib.pyplot as plt
