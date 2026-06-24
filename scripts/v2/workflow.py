@@ -550,7 +550,7 @@ print(f"{len(pps)} gages fall within the basin boundary")
 gages_gdf = pps.set_crs("EPSG:4326")
 gage_ids = gages_gdf['gage'].to_list()
 gages_gdf.to_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_gages.gpkg'))
-gages_gdf.to_file(os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet'))
+gages_gdf.to_parquet(os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet'))
 
 
 ###################### STEP 2: Delineate watersheds from NLDI #####################
