@@ -20,6 +20,7 @@ from rasterstats import zonal_stats
 import rasterio
 os.environ["API_USGS_PAT"] = "ePZbH4mtoakm2VYSZDE78clCxGDmKxRWd7nWYzpt"
 from dataretrieval import waterdata
+import pyarrow
 
 ###############
 # 1 download DEM (R script) # don't need, can just grab basins from NLDI
@@ -30,6 +31,7 @@ from dataretrieval import waterdata
 
 cwd = os.getcwd()
 ncwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow'
+appcwd = os.path.join(cwd, r'shiny-app\ucol_natural')
 
 
 def diagnose_gage_quality(df, completion_threshold=0.90):
@@ -422,21 +424,93 @@ def add_usgs_prefix(data):
     else:
         raise TypeError("Input must be a string or a list of strings")
 
+from shapely.geometry import Polygon, MultiPolygon
+
+def df_to_geodataframe(
+    df: pd.DataFrame,
+    lat_col: str = "lat",
+    lon_col: str = "lon",
+    crs: str = "EPSG:4326",
+    drop_latlon: bool = False,
+) -> gpd.GeoDataFrame:
+    """
+    Convert a pandas DataFrame with latitude/longitude columns to a GeoDataFrame of points.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame containing coordinate columns.
+    lat_col : str
+        Name of the latitude column. Default is 'lat'.
+    lon_col : str
+        Name of the longitude column. Default is 'lon'.
+    crs : str
+        Coordinate reference system for the output GeoDataFrame. Default is 'EPSG:4326' (WGS84).
+    drop_latlon : bool
+        If True, drop the original lat/lon columns from the output. Default is False.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        GeoDataFrame with a Point geometry column.
+
+    Raises
+    ------
+    KeyError
+        If lat_col or lon_col are not found in the DataFrame.
+    ValueError
+        If lat/lon columns contain non-numeric or all-null values.
+    """
+    missing = [c for c in [lat_col, lon_col] if c not in df.columns]
+    if missing:
+        raise KeyError(f"Column(s) not found in DataFrame: {missing}")
+
+    for col in [lat_col, lon_col]:
+        if df[col].isna().all():
+            raise ValueError(f"Column '{col}' contains all null values.")
+
+    geometry = gpd.points_from_xy(df[lon_col].astype(float), df[lat_col].astype(float))
+
+    gdf = gpd.GeoDataFrame(df.copy(), geometry=geometry, crs=crs)
+
+    if drop_latlon:
+        gdf = gdf.drop(columns=[lat_col, lon_col])
+
+    return gdf
+
+
+def remove_polygon_holes(geometry):
+    """
+    Removes holes from a Shapely Polygon or MultiPolygon.
+    
+    Parameters:
+    geometry (Polygon or MultiPolygon): The input geometry with holes.
+    
+    Returns:
+    Polygon or MultiPolygon: The filled geometry without holes.
+    """
+    if isinstance(geometry, Polygon):
+        # Create a new polygon using only the exterior linear ring
+        return Polygon(geometry.exterior)
+        
+    elif isinstance(geometry, MultiPolygon):
+        # Iterate through each sub-polygon, fix it, and bundle back into a MultiPolygon
+        filled_polygons = [Polygon(poly.exterior) for poly in geometry.geoms]
+        return MultiPolygon(filled_polygons)
+        
+    else:
+        # Return the geometry untouched if it's a Point, LineString, etc.
+        return geometry
+
 ################## STEP 1 #####################
 
 # This step searchs the Ucol watershed for USGS gages and finds point locations
-
-
-# query basins
-ucol = gpd.read_file(join(ncwd, r"data\shapefiles\UCOL\UCOL.shp")).set_crs('4326')
-ucol_geom = ucol.union_all()  # single shapely geometry for spatial filtering
-if isinstance(ucol_geom, MultiPolygon):
-    polygon = ucol_geom.geoms[0]
-else:
-    polygon = ucol_geom  # Fallback if it's already a Polygon
-
-ucol = gpd.GeoDataFrame(geometry=[polygon], crs=4326)
-
+ucol_gage = '09379900'
+ucol = nldi.get_basins(ucol_gage)['geometry'].iloc[0]
+ucol_geom = remove_polygon_holes(ucol)
+ucol = gpd.GeoDataFrame(geometry=[ucol_geom], crs=4326)
+ucol.to_file(os.path.join(ncwd, r'data\shapefiles\UCOL.parquet'))
+ucol.to_file(os.path.join(appcwd, r'spatial_data\UCOL.parquet'))
 
 tiles = make_tiles(ucol, n_tiles_x=3, n_tiles_y=3)
 print(f"Querying NWIS across {len(tiles)} tiles…")
@@ -468,24 +542,16 @@ info = info.rename(columns = {'station_nm':'name', 'site_no':'gage'})
 # ── Spatial filter: keep only gages inside the basin polygon ──────────────────
 info_gdf = gpd.GeoDataFrame(info, geometry="geometry", crs="EPSG:4326")
 print(f"Found {len(info)} gages")
-inside_mask  = info_gdf.geometry.within(ucol_geom)
+inside_mask = info_gdf.geometry.within(ucol_geom)
 pps = info_gdf[inside_mask].copy().reset_index(drop=True)
 print(f"{len(pps)} gages fall within the basin boundary")
 
 # info is already a GeoDataFrame with point geometry
 gages_gdf = pps.set_crs("EPSG:4326")
 gage_ids = gages_gdf['gage'].to_list()
+gages_gdf.to_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_gages.gpkg'))
+gages_gdf.to_file(os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet'))
 
-# flow = NWIS.get_streamflow(gage_ids, dates, freq="dv") # this takes time
-# print(flow.shape)   # (n_days, n_stations)
-#  # filter them
-# flow_f = filter_gages_by_quality(flow)
-
-# pattern = r"USGS-(\d+)"
-# gage_ids = [
-#     re.search(pattern, col).group(1) if re.search(pattern, col) else col 
-#     for col in flow_f.columns
-# ]
 
 ###################### STEP 2: Delineate watersheds from NLDI #####################
 nldi  = NLDI()
@@ -501,8 +567,14 @@ for id in gage_ids:
 # the polygons
 basins = pd.concat(basins_list)
 
+# TODO get a bigger DEM for all of UCOL :( and delineate some more
+
 # manually delineate the ones that NLDI didn't get
 manual_delineate_list = gages_gdf[gages_gdf['gage'].isin(no_work)]
+manual_delineate_list = manual_delineate_list[
+    ~manual_delineate_list['name'].str.lower().str.contains('canal') & 
+    ~manual_delineate_list['name'].str.lower().str.contains('tunnel')
+]
 dem_path = os.path.join(ncwd, r'data\terrain\dem_ucol_30m.tif')
 terrain_folder = os.path.join(ncwd, r'data\terrain\dem_ucol')
 
@@ -536,6 +608,7 @@ man_delin['geometry'] = man_delin['geometry'].apply(
 man_delin = man_delin.set_geometry('geometry')
 man_delin = man_delin.set_crs(4326)
 man_delin.to_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
+man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
 
 basins.geometry = basins.geometry.to_crs(4326)
 basins['gage'] = basins.index
@@ -543,20 +616,26 @@ basins['gage'] = basins['gage'].apply(fix_gage_id)
 basins.reset_index(drop=True, inplace=True)
 basins = pd.concat([basins, man_delin])
 
-# dict for names
+# save
+#basins.to_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
+
+#############################################################################
+# GET STREAMFLOW AND MERGE DIVERSION DATA
+#############################################################################
+
+# skip previous steps by reading these
+gages_gdf = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/ucol_gages.gpkg'))
+basins = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
+# make dict for names
 name_dict = gages_gdf.set_index('gage')['name'].to_dict()
 basins['name'] = basins['gage'].map(name_dict)
-# save
-basins.to_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
-
 # Get all streamflow
 date_range = ("2003-10-01", "2025-09-30")
 flow = NWIS.get_streamflow(gages_gdf['gage'].to_list(), date_range, freq="dv")
-flowmmd = NWIS.get_streamflow(gages_gdf['gage'].to_list(), date_range, freq="dv", mmd=True)
 
 # fix timeseries index
 flow.index = flow.index.normalize().tz_localize(None)
-flowmmd.index = flowmmd.index.normalize().tz_localize(None)
+
 # rename columns
 rename_dict = {}
 for usgsgage in flow.columns:
@@ -574,29 +653,149 @@ df, metadata = waterdata.get_daily(
     time=f'{date_range[0]}/{date_range[1]}'
 )
 
-rename_dict = {}
-for usgsgage in flowmmd.columns:
+# get basin area
+basins.geometry = basins.geometry.to_crs(5070)
+basins['area_m2'] = basins.area
+# add all the ones that didn't work
+for usgsgage in df['monitoring_location_id'].unique():
     gage = fix_gage_id(usgsgage)
-    rename_dict[usgsgage] = f'{gage}_mmd'
-flowmmd = flowmmd.rename(columns=rename_dict)
+    sub_df = df[df['monitoring_location_id']==usgsgage][['time', 'value']]
+    sub_df = sub_df.rename(columns={'value':gage})
+    sub_df = sub_df.set_index('time')
+    flow[gage] = sub_df[gage] * 0.0283168
 
-flow2 = pd.merge(left=flow, right=flowmmd, left_index=True, right_index=True)
+# DIVERSIONS
+# COLUMN = siteID
+dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
+
+# this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
+# this should be considered a transbasin import for that subbasin. For a large sub-basin that has a intrabasin diversion
+# that delivers somewhere within the basin, the consumptive use of the intrabasin diversion will cancel out with
+# the transbasin import
+dvrs_intra = dvrs[dvrs['siteUse']=='intrabasin'].copy()
+dvrs_intra['siteUse'] = 'transbasin'
+dvrs_intra['origin_decLat'] = dvrs_intra['decLat']
+dvrs_intra['origin_decLong'] = dvrs_intra['decLong']
+dvrs_intra['decLat'] = dvrs_intra['dest_decLat']
+dvrs_intra['decLong'] = dvrs_intra['dest_decLong']
+
+dvrs_intra['siteID'] = dvrs_intra['siteID'].str.replace('intrabasin', 'transbasin')
+# add rows for the transbasin
+dvrs = pd.concat([dvrs, dvrs_intra])
+# need to rebuild the geometry after this
+dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
+dvrs.to_file(os.path.join(ncwd, r"data\shapefiles\ucrb_diversion_master_table.gpkg"))
+
+# WATERSHEDS
+# gageID column = gage
+
+#wsheds = gpd.read_file(os.path.join(ncwd, r'data\shapefiles\UCOL_headwaters_sheds.shp')).to_crs(dvrs.crs)
+wsheds = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/basin_selection_results.gpkg'))
+#wsheds = wsheds[allsheds.model_category.str.contains('train_test')]
+
+# WIDE CSV FOR DIVERSION DATA IN CFS
+# COLUMN HEADERS = siteID
+# date column = Date
+dvrsFlow = pd.read_csv(os.path.join(ncwd, "data\diversion\processed\processed_data\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+# merge with 2022 to 2025
+dvrsFlow2 = pd.read_csv(os.path.join(ncwd, "data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+dvrsFlow = pd.concat([dvrsFlow, dvrsFlow2])
+
+# OUT DIRECTORY FOR STREAMFLOW WITH DIVERSIONS
+wdvrsDir = os.path.join(ncwd, r'data\timeseries\selected_w_diversion')
+
+# 1. Spatial Join: Find which diversions are in which watersheds
+# 'inner' join keeps only points that fall inside a polygon
+# 'within' ensures the point is geometrically inside the watershed boundary
+wsheds.geometry = wsheds.geometry.to_crs(4326)
+joined = gpd.sjoin(dvrs, wsheds, how="inner", predicate="within")
+
+# 2. Ensure date columns are datetime objects for proper merging
+dvrsFlow['Date'] = pd.to_datetime(dvrsFlow['Date'])
 
 # send to csvs
 for gage in flow.columns:
-    try:
-        df = flow2[[gage, f'{gage}_mmd']]
-        df = df.rename(columns={gage:'Q_cms', f'{gage}_mmd': 'Q_mmd'})
-        df['Q_cfs'] = df['Q_cms'] * 35.3147
 
-        df = df.asfreq('D')
-        df['name'] = name_dict[gage]
-        df['gage'] = gage
-        outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\timeseries\all_ucol\{gage}.csv'
+    df = flow[[gage]]
+    df = df.rename(columns={gage:'Q_cms'})
+    df['Q_cfs'] = df['Q_cms'] * 35.3147
+    # add area and mmd
+    area = basins[basins['gage']==gage]['area_m2'].iloc[0]
+    df['Q_mmd'] = (df['Q_cms'] * 86400000) / area
+    df['area_m2'] = area
+    # make sure it's got every day
+    df = df.asfreq('D')
+    # add name and gage as columns
+    df['name'] = name_dict[gage]
+    df['gage'] = gage
+    
+    # Identify siteIDs for diversions located in this specific watershed
+    target_diversions = joined[joined['gage'] == gage]['siteID'].unique()
+    print(gage, f'diversions: {len(target_diversions)}')
 
-        df.to_csv(outpath, index_label='date')
-    except:
-        print(f'no streamflow: {gage}')
+    # loop through the diversions
+    if len(target_diversions) > 0:
+        # Filter diversion data for the relevant siteIDs
+        valid_cols = [sid for sid in target_diversions if sid in dvrsFlow.columns]
+    
+        if valid_cols:
+            # 1. Extract the raw data
+            subset_dvrs = dvrsFlow[['Date'] + valid_cols].copy()
+            # 2. Convert raw diversions to Consumptive Use (CU)
+            useDict = {
+                'irrigation': -0.6, 'municipal': -0.3, 'interbasin': -1, 
+                'industrial': -1, 'hydropower': 0, 'intrabasin': -1, 'transbasin': 1
+            }
+
+            # INTERBASIN = all water leaves UCOL
+            # INTRABASIN = water may or may not leave sub-basin. Does not leave UCOL
+            # TRANSBASIN = water imported from an intrabasin transfer.
+            
+            # Create a temporary list to hold the names of the new CU columns
+            cu_cols = []
+            # do it for each unit
+            units = ['cfs', 'cms', 'mmd']
+            for unit in units:
+                for col in valid_cols:
+                    # Determine the multiplier by checking the end of the siteID string
+                    multiplier = 0 # Default if no match is found
+                    for usage, val in useDict.items():
+                        if col.lower().endswith(usage):
+                            multiplier = val
+                            break
+
+                    mmd_scale = 2446575.5461 / area # goes from cfs to mmd
+                    unit_multiplier = {'cfs':1, 'cms':0.0283168, 'mmd':mmd_scale}
+                    # Calculate CU for this specific diversion
+                    cu_col_name = f"{col}_CU_{unit}"
+                    subset_dvrs[cu_col_name] = subset_dvrs[col] * multiplier * unit_multiplier[unit]
+                    cu_cols.append(cu_col_name)
+                
+                # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
+                subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[cu_cols].sum(axis=1)
+        
+        # 4. merge
+        combined_df = pd.merge(
+            df, 
+            subset_dvrs.rename(columns={'Date': 'date'}), 
+            on='date', 
+            how='inner'
+        )
+        
+        for unit in units:
+            combined_df[f'Q_NAT_{unit}'] = combined_df[f'Q_{unit}'] - combined_df[f'Q_CU_{unit}']
+
+    else:
+        # If no diversions found, we still save the original flow (or skip)
+        combined_df = df
+        
+    # 4. Save the new CSV
+    if len(combined_df) < 1:
+        raise Exception('merge failed: df has no rows')
+
+    out_path = os.path.join(wdvrsDir, f"{gage}.csv")
+    combined_df.to_csv(out_path, index=False)
+    print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
 
 # Now we need to select basins for training, testing, and implementation
 from scipy.optimize import milp, LinearConstraint, Bounds

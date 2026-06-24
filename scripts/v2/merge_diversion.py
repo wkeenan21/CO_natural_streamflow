@@ -65,17 +65,24 @@ cwd = os.getcwd()
 # DIVERSIONS
 # COLUMN = siteID
 dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
-dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
 
+# this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
+# this should be considered a transbasin import for that subbasin. For a large sub-basin that has a intrabasin diversion
+# that delivers somewhere within the basin, the consumptive use of the intrabasin diversion will cancel out with
+# the transbasin import
 dvrs_intra = dvrs[dvrs['siteUse']=='intrabasin'].copy()
 dvrs_intra['siteUse'] = 'transbasin'
+dvrs_intra['origin_decLat'] = dvrs_intra['decLat']
+dvrs_intra['origin_decLong'] = dvrs_intra['decLong']
 dvrs_intra['decLat'] = dvrs_intra['dest_decLat']
 dvrs_intra['decLong'] = dvrs_intra['dest_decLong']
+
 dvrs_intra['siteID'] = dvrs_intra['siteID'].str.replace('intrabasin', 'transbasin')
-
+# add rows for the transbasin
 dvrs = pd.concat([dvrs, dvrs_intra])
-
-#dvrs.to_file(r"data\shapefiles\ucrb_diversion_master_table.shp")
+# need to rebuild the geometry after this
+dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
+dvrs.to_file(os.path.join(ncwd, r"data\shapefiles\ucrb_diversion_master_table.gpkg"))
 
 # WATERSHEDS
 # gageID column = gage
@@ -94,6 +101,9 @@ flowDir = os.path.join(ncwd, r'data\timeseries\all_ucol')
 # COLUMN HEADERS = siteID
 # date column = Date
 dvrsFlow = pd.read_csv(os.path.join(ncwd, "data\diversion\processed\processed_data\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+# merge with 2022 to 2025
+dvrsFlow2 = pd.read_csv(os.path.join(ncwd, "data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+dvrsFlow = pd.concat([dvrsFlow, dvrsFlow2])
 
 # OUT DIRECTORY FOR STREAMFLOW WITH DIVERSIONS
 wdvrsDir = os.path.join(ncwd, r'data\timeseries\selected_w_diversion')
@@ -101,10 +111,12 @@ wdvrsDir = os.path.join(ncwd, r'data\timeseries\selected_w_diversion')
 # 1. Spatial Join: Find which diversions are in which watersheds
 # 'inner' join keeps only points that fall inside a polygon
 # 'within' ensures the point is geometrically inside the watershed boundary
+wsheds.geometry = wsheds.geometry.to_crs(4326)
 joined = gpd.sjoin(dvrs, wsheds, how="inner", predicate="within")
 
 # 2. Ensure date columns are datetime objects for proper merging
 dvrsFlow['Date'] = pd.to_datetime(dvrsFlow['Date'])
+
 
 # 3. Process each watershed
 for gage_id in wsheds['gage'].unique():
@@ -122,39 +134,47 @@ for gage_id in wsheds['gage'].unique():
         flow_df = pd.read_csv(flow_file_path)
         flow_df['date'] = pd.to_datetime(flow_df['date'])
         flow_df['date'] = flow_df['date'].dt.tz_localize(None).dt.normalize()
-        
+        area = flow_df['area_m2'].iloc[0]
+
         if len(target_diversions) > 0:
             # Filter diversion data for the relevant siteIDs
             valid_cols = [sid for sid in target_diversions if sid in dvrsFlow.columns]
-            
+        
             if valid_cols:
                 # 1. Extract the raw data
                 subset_dvrs = dvrsFlow[['Date'] + valid_cols].copy()
-                
                 # 2. Convert raw diversions to Consumptive Use (CU)
                 useDict = {
                     'irrigation': -0.6, 'municipal': -0.3, 'interbasin': -1, 
                     'industrial': -1, 'hydropower': 0, 'intrabasin': -1, 'transbasin': 1
                 }
+
+                # INTERBASIN = all water leaves UCOL
+                # INTRABASIN = water may or may not leave sub-basin. Does not leave UCOL
+                # TRANSBASIN = water imported from an intrabasin transfer.
                 
                 # Create a temporary list to hold the names of the new CU columns
                 cu_cols = []
-                
-                for col in valid_cols:
-                    # Determine the multiplier by checking the end of the siteID string
-                    multiplier = 0 # Default if no match is found
-                    for usage, val in useDict.items():
-                        if col.lower().endswith(usage):
-                            multiplier = val
-                            break
+                # do it for each unit
+                units = ['cfs', 'cms', 'mmd']
+                for unit in units:
+                    for col in valid_cols:
+                        # Determine the multiplier by checking the end of the siteID string
+                        multiplier = 0 # Default if no match is found
+                        for usage, val in useDict.items():
+                            if col.lower().endswith(usage):
+                                multiplier = val
+                                break
+
+                        mmd_scale = 2446575.5461 / area # goes from cfs to mmd
+                        unit_multiplier = {'cfs':1, 'cms':0.0283168, 'mmd':mmd_scale}
+                        # Calculate CU for this specific diversion
+                        cu_col_name = f"{col}_CU_{unit}"
+                        subset_dvrs[cu_col_name] = subset_dvrs[col] * multiplier * unit_multiplier[unit]
+                        cu_cols.append(cu_col_name)
                     
-                    # Calculate CU for this specific diversion
-                    cu_col_name = f"{col}_CU"
-                    subset_dvrs[cu_col_name] = subset_dvrs[col] * multiplier
-                    cu_cols.append(cu_col_name)
-                
-                # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
-                subset_dvrs['Q_cfs_cu'] = subset_dvrs[cu_cols].sum(axis=1)
+                    # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
+                    subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[cu_cols].sum(axis=1)
             
             # 4. merge
             combined_df = pd.merge(
@@ -163,8 +183,10 @@ for gage_id in wsheds['gage'].unique():
                 on='date', 
                 how='inner'
             )
+            
+            for unit in units:
+                combined_df[f'Q_NAT_{unit}'] = combined_df[f'Q_{unit}'] - combined_df[f'Q_CU_{unit}']
 
-            combined_df['Q_cfs_nat'] = combined_df['Q_cfs'] - combined_df['Q_cfs_cu']
         else:
             # If no diversions found, we still save the original flow (or skip)
             combined_df = flow_df
@@ -173,7 +195,6 @@ for gage_id in wsheds['gage'].unique():
         if len(combined_df) < 1:
             raise Exception('merge failed: df has no rows')
 
-
         out_path = os.path.join(wdvrsDir, f"{gage_id}.csv")
         combined_df.to_csv(out_path, index=False)
         print(f"Processed gage {gage_id}: Added {len(target_diversions)} diversion columns.")
@@ -181,41 +202,99 @@ for gage_id in wsheds['gage'].unique():
         print(f"Warning: Streamflow file for {gage_id} not found in {flowDir}.")
 
 
-def plot_watershed_flows(df, gage_id, sdate='2000-01-01', edate='2026-01-01'):
+# 1. Configurable Color Dictionary
+# You can play around with these hex codes or standard matplotlib color names!
+CU_COLORS = {
+    'irrigation': '#e6ab02',   # Warm gold/amber
+    'municipal': '#7570b3',    # Soft purple
+    'interbasin': '#d95f02',   # Dark orange
+    'industrial': '#666666',   # Muted grey
+    'hydropower': '#1b7837',   # Deep green
+    'intrabasin': '#a6761d',   # Light brown
+    'transbasin': '#e7298a'    # Vibrant pink
+}
+
+def plot_watershed_flows(df, gage_id, unit='cfs', sdate='2000-01-01', edate='2025-09-30', color_dict=CU_COLORS, log_scale=False):
     """
-    Plots Observed, Consumptive Use, and Naturalized flows.
+    Plots Observed, Naturalized, and categorized Consumptive Use flows.
+    
+    Parameters:
+    - df: Pandas DataFrame containing the data.
+    - gage_id: ID string for the gage title.
+    - area_m2: Watershed area in sq meters (REQUIRED if unit='mmd').
+    - unit: Unit to plot ('cfs', 'cms', or 'mmd').
+    - sdate/edate: Date filtering bounds.
+    - color_dict: Dictionary mapping CU types to colors.
+    - log_scale: Boolean to enable symmetrical log-scaling for the y-axis.
     """
-    # Ensure date is the index for cleaner plotting
+
+    if unit.lower() == 'cfs':
+        unit_label = 'cfs'
+    elif unit.lower() == 'cms':
+        unit_label = 'cms'
+    elif unit.lower() == 'mmd':
+        unit_label = 'mm/d'
+    else:
+        raise ValueError("Invalid unit type. Choose from 'cfs', 'cms', or 'mmd'.")
+
+    # 3. Clean and filter data
     plot_df = df.set_index('date').sort_index()
     plot_df.index = pd.to_datetime(plot_df.index)
     sdate = pd.Timestamp(sdate)
     edate = pd.Timestamp(edate)
     plot_df = plot_df[(plot_df.index > sdate) & (plot_df.index < edate)]
+    plot_df = plot_df.filter(like=unit)
 
+    # Identify all individual CU type columns dynamically present in the df
+    cu_types = list(color_dict.keys())
+    cu_cols = [col for col in plot_df.columns if 'CU' in col and 'div' in col]
+
+    # Aggregate columns matching each diversion type
+    agg_cu_df = pd.DataFrame(index=plot_df.index)
+    for cu_type in cu_types:
+        matched_cols = [col for col in cu_cols if f'_{cu_type}_' in col.lower()]
+        if matched_cols:
+            agg_cu_df[cu_type] = plot_df[matched_cols].sum(axis=1)
+        else:
+            agg_cu_df[cu_type] = 0.0
+
+    # Apply scaling to the baseline flows
+    q_nat = plot_df[f'Q_NAT_{unit}']
+    q_obs = plot_df[f'Q_{unit}']
+
+    # 4. Plotting
     plt.figure(figsize=(12, 6))
 
-    # 1. Plot Naturalized Flow (usually the highest)
-    plt.plot(plot_df.index, plot_df['Q_cfs_nat'], 
-             label='Naturalized Flow (Q_nat)', color='forestgreen', alpha=0.8, linewidth=1.5)
+    # Plot Naturalized & Observed
+    plt.plot(plot_df.index, q_nat, label=f'Naturalized Flow ({unit_label})', 
+             color='forestgreen', alpha=0.8, linewidth=1.5)
+    plt.plot(plot_df.index, q_obs, label=f'Observed Flow ({unit_label})', 
+             color='royalblue', alpha=0.7, linewidth=1.2)
 
-    # 2. Plot Observed Flow
-    plt.plot(plot_df.index, plot_df['Q_cfs'], 
-             label='Observed Flow (Q_obs)', color='royalblue', alpha=0.7, linewidth=1.2)
+    # Plot Categorized Consumptive Use as a Stacked Area Plot (Growing downward)
+    bottom_fill = pd.Series(0.0, index=plot_df.index)
+    for cu_type in cu_types:
+        if agg_cu_df[cu_type].sum() < 0:  # Checking for negative values
+            plt.fill_between(plot_df.index, bottom_fill, bottom_fill + agg_cu_df[cu_type],
+                             label=f'CU: {cu_type.capitalize()}', 
+                             color=color_dict.get(cu_type, '#cccccc'), alpha=0.6)
+            bottom_fill += agg_cu_df[cu_type]
 
-    # 3. Plot Consumptive Use (Area fill is often better for CU)
-    plt.fill_between(plot_df.index, 0, plot_df['Q_cfs_cu'], 
-                     label='Consumptive Use (Q_cu)', color='red', alpha=0.3)
+    # Handle Log Scale Scaling
+    if log_scale:
+        # 'symlog' handles positive and negative log domains
+        plt.yscale('symlog', linthresh=0.1) 
+        # Add a clear horizontal reference line at 0
+        plt.axhline(0, color='black', linewidth=0.8, linestyle='-')
 
     # Formatting
-    plt.title(f'Streamflow Components for Gage: {gage_id}', fontsize=14)
+    plt.title(f'Streamflow Components & Consumptive Use Types (Gage: {gage_id})', fontsize=14)
     plt.xlabel('Date', fontsize=12)
-    plt.ylabel('Flow (cfs)', fontsize=12)
-    plt.legend(loc='upper right')
+    plt.ylabel(f'Flow ({unit_label}) {"[Log Scale]" if log_scale else ""}', fontsize=12)
+    plt.legend(loc='upper right', bbox_to_anchor=(1.25, 1))  
     plt.grid(True, which='both', linestyle='--', alpha=0.5)
     plt.tight_layout()
 
-    # Show or save
-    # plt.savefig(f"{gage_id}_flow_plot.png")
     plt.show()
 
 
@@ -223,7 +302,7 @@ def plot_watershed_flows(df, gage_id, sdate='2000-01-01', edate='2026-01-01'):
 gage = '09163500'
 df = pd.read_csv(os.path.join(ncwd, fr"data\timeseries\selected_w_diversion\{gage}.csv"))
 # Example usage inside your loop:
-plot_watershed_flows(df, gage, sdate='2019-01-01')
+plot_watershed_flows(df, gage, sdate='2022-01-01')
 
 
 # lets look for gages where natural flow may be lower than observed because of transbasin imports
