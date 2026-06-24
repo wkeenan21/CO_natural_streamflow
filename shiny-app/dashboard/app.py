@@ -1,81 +1,67 @@
-import seaborn as sns
-from faicons import icon_svg
-
-# Import data from shared.py
-from shared import app_dir, df
-
-from shiny import reactive
+import geopandas as gpd
+import ipyleaflet as L
 from shiny.express import input, render, ui
+from shinywidgets import render_widget
+import os
 
-ui.page_opts(title="Penguins dashboard", fillable=True)
+print(os.getcwd())
 
+# 1. Load the shapefile and calculate its bounding box extent
+# (Assumes your shapefile is in a 'data' folder relative to app.py)
+gdf = gpd.read_file(r"shiny-app\map-distance\data\bounding_box_CO.shp")
 
-with ui.sidebar(title="Filter controls"):
-    ui.input_slider("mass", "Mass", 2000, 6000, 6000)
-    ui.input_checkbox_group(
-        "species",
-        "Species",
-        ["Adelie", "Gentoo", "Chinstrap"],
-        selected=["Adelie", "Gentoo", "Chinstrap"],
-    )
+# Ensure it's in WGS84 (Lat/Lon) to match ipyleaflet coordinates
+if gdf.crs != "EPSG:4326":
+    gdf = gdf.to_crs(epsg=4326)
 
+# Get the total bounds: (minx, miny, maxx, maxy) -> (min_lon, min_lat, max_lon, max_lat)
+minx, miny, maxx, maxy = gdf.total_bounds
+center_lat = (miny + maxy) / 2
+center_lon = (minx + maxx) / 2
+bounds = [[miny, minx], [maxy, maxx]]
 
-with ui.layout_column_wrap(fill=False):
-    with ui.value_box(showcase=icon_svg("earlybirds")):
-        "Number of penguins"
+# 2. Setup the Shiny Page (Clean layout, no sidebar or tiles)
+ui.page_opts(title="Colorado Map View", fillable=True)
 
-        @render.text
-        def count():
-            return filtered_df().shape[0]
+with ui.card():
+    ui.card_header("Colorado Boundary Map")
 
-    with ui.value_box(showcase=icon_svg("ruler-horizontal")):
-        "Average bill length"
-
-        @render.text
-        def bill_length():
-            return f"{filtered_df()['bill_length_mm'].mean():.1f} mm"
-
-    with ui.value_box(showcase=icon_svg("ruler-vertical")):
-        "Average bill depth"
-
-        @render.text
-        def bill_depth():
-            return f"{filtered_df()['bill_depth_mm'].mean():.1f} mm"
-
-
-with ui.layout_columns():
-    with ui.card(full_screen=True):
-        ui.card_header("Bill length and depth")
-
-        @render.plot
-        def length_depth():
-            return sns.scatterplot(
-                data=filtered_df(),
-                x="bill_length_mm",
-                y="bill_depth_mm",
-                hue="species",
-            )
-
-    with ui.card(full_screen=True):
-        ui.card_header("Penguin data")
-
-        @render.data_frame
-        def summary_statistics():
-            cols = [
-                "species",
-                "island",
-                "bill_length_mm",
-                "bill_depth_mm",
-                "body_mass_g",
-            ]
-            return render.DataGrid(filtered_df()[cols], filters=True)
-
-
-ui.include_css(app_dir / "styles.css")
-
-
-@reactive.calc
-def filtered_df():
-    filt_df = df[df["species"].isin(input.species())]
-    filt_df = filt_df.loc[filt_df["body_mass_g"] < input.mass()]
-    return filt_df
+    @render_widget
+    def map():
+        # Initialize map centered on the shapefile's center
+        m = L.Map(center=(center_lat, center_lon))
+        
+        # Define the two requested basemaps
+        osm_layer = L.basemap_to_tiles(L.basemaps.OpenStreetMap.Mapnik)
+        satellite_layer = L.basemap_to_tiles(L.basemaps.Esri.WorldImagery)
+        
+        # Give them user-friendly names for the LayerControl toggle
+        osm_layer.name = "Open Street Maps"
+        satellite_layer.name = "Satellite"
+        
+        # Add layers to the map
+        m.add_layer(osm_layer)
+        m.add_layer(satellite_layer)
+        
+        # Add the Shapefile data layer to the map
+        geo_data = L.GeoData(
+            geo_dataframe=gdf,
+            style={
+                "color": "blue",
+                "opacity": 1,
+                "weight": 2,
+                "fillOpacity": 0.2,
+                "fillColor": "blue",
+            },
+            name="CO Bounding Box",
+        )
+        m.add_layer(geo_data)
+        
+        # Add a LayerControl so users can toggle between basemaps
+        control = L.LayersControl(position="topright")
+        m.add_control(control)
+        
+        # Force the map to fit the exact bounding box extent of the shapefile
+        m.fit_bounds(bounds)
+        
+        return m
