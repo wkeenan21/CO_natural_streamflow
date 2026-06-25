@@ -1,5 +1,6 @@
 import geopandas as gpd
 import ipyleaflet as L
+import ipywidgets as widgets
 import os
 from shiny.express import input, render, ui
 from shinywidgets import render_widget
@@ -37,24 +38,18 @@ with ui.card():
                 "fillOpacity": 0.0,
                 "fillColor": "black",
             },
+            interactive=False,
             name="Upper Colorado River Basin",
         )
 
         # Style points as black circles instead of blue markers
         gages_layer = L.GeoData(
             geo_dataframe=gages,
-            style={
-                "color": "black",
-                "fillColor": "black",
-                "opacity": 1,
-                "weight": 1,
-                "fillOpacity": 1,
-            },
             point_style={
-                "radius": 5,
-                "color": "black",
-                "fillColor": "black",
-                "fillOpacity": 1,
+                "radius": 4,
+                "color": "blue",
+                "fillColor": "grey",
+                "fillOpacity": 0.5,
                 "weight": 1,
             },
             name="Streamflow Gages",
@@ -64,36 +59,47 @@ with ui.card():
         m = L.Map(
             center=(center_lat, center_lon), 
             zoom=10, 
-            layers=[osm_layer, ucol_layer, gages_layer],
+            layers=[gages_layer, ucol_layer, osm_layer],
             scroll_wheel_zoom=True
         )
 
-        # 3. Add dynamic popup interaction on click
-        def handle_click(event, feature, **kwargs):
-            # Extract geometry coordinates for popup placement
+        # 2. Make popups for gages
+        # 1. Initialize an empty Popup and attach it to the map
+        popup = L.Popup(
+            location=[41.107166, -104.970417],
+            child=widgets.HTML(value="Click a gage"),
+            close_button=True,
+            auto_close=True,
+            close_on_escape_key=True
+        )
+        m.add(popup)
+
+       # 2. Setup your click handler function (remove the global popup variable)
+        def gage_click(event=None, feature=None, id=None, **kwargs):
+            # Extract properties from the clicked feature safely
+            properties = feature.get('properties', {})
+            name = properties.get('name', 'Unknown')
+            value = properties.get('gage', 'No data')
+            
+            # Extract coordinates and flip from [lon, lat] to [lat, lon]
             coords = feature['geometry']['coordinates']
-            # GeoJSON coordinates are [lon, lat], Leaflet wants [lat, lon]
             lat_lon = [coords[1], coords[0]]
             
-            # Build an HTML string out of the point's attributes
-            props = feature['properties']
-            html_content = ui.HTML(
-                f"<h4>Gage Info</h4>" + 
-                "".join(f"<b>{k}:</b> {v}<br>" for k, v in props.items())
-            )
-            
-            # Create and add the popup to the map
-            popup = L.Popup(
+            # Create a fresh Popup instance on every single click
+            new_popup = L.Popup(
                 location=lat_lon,
-                child=html_content,
+                child=widgets.HTML(value=f"<b>{name}</b><br>Gage:<b>USGS-{value}</b><br>"),
                 close_button=True,
                 auto_close=True,
                 close_on_escape_key=True
             )
-            m.add_layer(popup)
+            
+            # Add the fresh popup to the map
+            m.add(new_popup)
+            print(f'clicking: {coords, name, value}')
 
-        # Attach click event listener to the gages layer
-        gages_layer.on_click(handle_click)
+        # 3. Attach the click event to your GeoData layer
+        gages_layer.on_click(gage_click)
 
         # Add the layer control safely now that the layers exist
         control = L.LayersControl(position="topright")
