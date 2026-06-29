@@ -11,7 +11,7 @@ from shinywidgets import render_widget
 # 1. Load data
 ucol = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\UCOL.parquet").to_crs(epsg=4326)
 gages = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_gages.parquet").to_crs(epsg=4326)
-basins = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_basins.parquet").to_crs(epsg=4326) # <-- New Basins Layer
+basins = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_basins.parquet").to_crs(epsg=4326)
 
 ts_dir = r'shiny-app\ucol_natural\timeseries'
 
@@ -137,29 +137,55 @@ with ui.layout_column_wrap(width=1/2):
 
         @reactive.calc
         def get_filtered_data():
+            # grab user inputs
             gage_info = selected_gage.get()
+            unit_choice = input.units()
+            start_date, end_date = input.date_range()
+
+            # at start gage_info is none 
             if gage_info is None:
                 return None
-                
+            # load path and gage
             gage = gage_info["gage"]
             csv_path = os.path.join(ts_dir, f"{gage}.csv")
-            
+            # hopefully this never triggers
             if not os.path.exists(csv_path):
                 return None
-                
+
+            # read csv
             df = pd.read_csv(csv_path)
             df['date'] = pd.to_datetime(df['date'])
+            df.index = df['date']
 
-            unit_choice = input.units()
+            # first drop all the dates with no streamflow
+            Q_col = f'Q_{unit_choice}'
+            first_valid = df[Q_col].first_valid_index()
+            last_valid = df[Q_col].last_valid_index()
+
+            # If the column is completely empty, you might want to handle it or clear the df
+            if first_valid is not None and last_valid is not None:
+                # Slice the dataframe to keep everything between (and including) those indexes
+                df = df.loc[first_valid:last_valid]
+            else:
+                # Handle the edge case where the entire column is NaN
+                df = df.iloc[0:0]
+            
+            # now filter in between user specified dates
+            mask = (df['date'] >= pd.to_datetime(start_date)) & (df['date'] <= pd.to_datetime(end_date))
+            filtered_df = df.loc[mask].copy()
+
+            first_valid_str = first_valid.strftime('%Y-%m-%d')
+            last_valid_str = last_valid.strftime('%Y-%m-%d')
+
+            if filtered_df.empty:
+                return filtered_df, (first_valid_str, last_valid_str)
+
+            # now filter for units
             unit_cols = [col for col in df.columns if col.endswith(f'_{unit_choice}')]
             columns = ['date'] + unit_cols
-            
-            start_date, end_date = input.date_range()
-            mask = (df['date'] >= pd.to_datetime(start_date)) & (df['date'] <= pd.to_datetime(end_date))
-            filtered_df = df.loc[mask].copy()[columns]
-            
-            filtered_df.index = filtered_df['date']
-            return filtered_df
+            filtered_df = filtered_df[columns]
+
+            return filtered_df, (first_valid_str, last_valid_str)
 
         @render_widget
         def plot_flows():
@@ -169,10 +195,9 @@ with ui.layout_column_wrap(width=1/2):
             }
             
             gage_info = selected_gage.get()
-            df = get_filtered_data()
             unit = input.units()
             
-            if gage_info is None or df is None:
+            if gage_info is None:
                 fig = go.Figure()
                 fig.add_annotation(
                     text="Click a stream gage on the map to view its interactive hydrograph.",
@@ -182,10 +207,14 @@ with ui.layout_column_wrap(width=1/2):
                 fig.update_layout(xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                                   yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
                 return fig
-            elif df.empty:
+
+            # now grab df    
+            df, valid_range = get_filtered_data()
+            
+            if df.empty:
                 fig = go.Figure()
                 fig.add_annotation(
-                    text="No data for these dates at this stream gage",
+                    text=f"No data for these dates at this stream gage. First date with flow data: {valid_range[0]}. Last date with flow data: {valid_range[1]}",
                     xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False,
                     font=dict(size=14, color="gray")
                 )
@@ -252,7 +281,7 @@ with ui.layout_column_wrap(width=1/2):
                 ))
 
             fig.update_layout(
-                title=dict(text=f'{name} (Gage: {gage})', font=dict(size=16)),
+                title=dict(text=f'{name} (Gage: {gage}), Period of record {valid_range[0]} to {valid_range[1]}', font=dict(size=16)),
                 xaxis=dict(title='Date', showgrid=True, gridcolor='#f0f0f0'),
                 yaxis=dict(title=f'Streamflow ({unit})', showgrid=True, gridcolor='#f0f0f0'),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
@@ -260,10 +289,6 @@ with ui.layout_column_wrap(width=1/2):
                 xaxis_type='date',
                 hovermode="x unified",
                 template="plotly_white"
-            )
-
-            fig.update_xaxes(
-                dtick="M1",      # Tick label every month
             )
 
             return fig

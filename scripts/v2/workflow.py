@@ -34,6 +34,116 @@ ncwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow'
 appcwd = os.path.join(cwd, r'shiny-app\ucol_natural')
 
 
+# Now we need to select basins for training, testing, and implementation
+from scipy.optimize import milp, LinearConstraint, Bounds
+
+def select_max_water_years_global(basins_gdf, flow_df, gage_col='gage'):
+    """
+    Selects a non-nested subset of basins within the Upper Colorado River Basin
+    using True Global Optimization (ILP) to maximize total basin-water-years.
+    """
+    num_basins = len(basins_gdf)
+    # -------------------------------------------------------------------------
+    # 2. Calculate Water Year Completeness Weights
+    # -------------------------------------------------------------------------
+    water_years = flow_df.index.to_series().apply(lambda d: d.year + 1 if d.month >= 10 else d.year)
+    
+    good_years_dict = {}
+    for col in flow_df.columns:
+        if col in basins_gdf[gage_col].values:
+            yearly_complete = flow_df[col].groupby(water_years).apply(lambda x: x.notna().mean() >= 0.70) # Using your 0.80 threshold
+            good_years_dict[col] = yearly_complete.sum()
+
+    basins_gdf['good_wy'] = basins_gdf[gage_col].map(good_years_dict).fillna(0)
+
+    # -------------------------------------------------------------------------
+    # 3. Build Conflict Matrix (Nesting Constraints)
+    # -------------------------------------------------------------------------
+    print("Analyzing spatial relationships to build global constraints...")
+    
+    # We need to construct an inequality matrix A where each row represents a conflict.
+    # If Basin i and Basin j intersect, we append a constraint: x_i + x_j <= 1
+    # This prevents the solver from selecting both.
+    constraints_list = []
+    
+    # Define a minimum overlap area threshold in square meters.
+    # For a 100m misalignment along a typical boundary, we can look at the total overlap area.
+    # Alternatively, you can check if the overlap constitutes more than e.g., 1% of the smaller basin.
+    AREA_CUSHION_M2 = 100 * 100  # 10,000 m² (equivalent to a 100m x 100m grid cell)
+
+    basins_list = basins_gdf.to_dict('records')
+    for i in range(num_basins):
+        poly_i = basins_list[i]['geometry']
+        
+        for j in range(i + 1, num_basins):
+            poly_j = basins_list[j]['geometry']
+            
+            # First do a fast check: do they even touch/overlap?
+            if poly_i.intersects(poly_j):
+                # Calculate the exact geometric intersection polygon
+                intersection_poly = poly_i.intersection(poly_j)
+                
+                # Only flag as a conflict if the intersection area exceeds our cushion
+                # (Note: Your GeoDataFrame must be in a metric projected CRS like UTM or Albers)
+                if intersection_poly.area > AREA_CUSHION_M2:
+                    
+                    # Optional secondary check: Ensure it's not just a long, thin sliver 
+                    # by checking if it represents more than 1% of either basin's total area.
+                    min_basin_area = min(poly_i.area, poly_j.area)
+                    if intersection_poly.area / min_basin_area > 0.01:
+                        
+                        row = np.zeros(num_basins)
+                        row[i] = 1
+                        row[j] = 1
+                        constraints_list.append(row)
+
+    # -------------------------------------------------------------------------
+    # 4. Set Up and Solve the Integer Linear Program (ILP)
+    # -------------------------------------------------------------------------
+    print("Solving Global Optimization Problem...")
+    
+    # The solver *minimizes* c^T * x. To maximize, we invert the weights (negative values)
+    c = -basins_gdf['good_wy'].values
+    
+    # Define bounds: each basin variable x must be 0 or 1 (Binary integer)
+    bounds = Bounds(0, 1)
+    integrality = np.ones(num_basins) # 1 means integer variable
+    
+    if len(constraints_list) > 0:
+        A = np.array(constraints_list)
+        # For every conflict row, the sum of selections must be less than or equal to 1
+        ub = np.ones(A.shape[0])
+        lb = np.zeros(A.shape[0]) # can be 0 or 1
+        constraints = LinearConstraint(A, lb, ub)
+    else:
+        constraints = []
+
+    # Run the Mixed-Integer Linear Programming solver
+    res = milp(c=c, bounds=bounds, constraints=constraints, integrality=integrality)
+    
+    if not res.success:
+        raise RuntimeError(f"Optimization failed: {res.message}")
+        
+    # Extracted selections (rounded cleanly to 0 or 1)
+    selected_indices = np.where(np.round(res.x) == 1)[0]
+    selected_gages = basins_gdf.iloc[selected_indices][gage_col].tolist()
+
+    # -------------------------------------------------------------------------
+    # 5. Map results back to the original DataFrame
+    # -------------------------------------------------------------------------
+    basins_gdf['model_category'] = 'no-model (nested or excluded)'
+    basins_gdf.loc[basins_gdf[gage_col].isin(selected_gages), 'model_category'] = 'train_test'
+    basins_gdf['good_water_years'] = basins_gdf[gage_col].map(good_years_dict).fillna(0)
+    
+    total_selected_years = basins_gdf[basins_gdf['model_category'] == 'train_test']['good_water_years'].sum()
+    
+    print(f"\nOptimization Complete!")
+    print(f"Selected {len(selected_gages)} non-nested basins.")
+    print(f"True Maximized High-Quality Basin-Water-Years: {int(total_selected_years)} years.")
+    
+    return basins_gdf
+
+
 def diagnose_gage_quality(df, completion_threshold=0.90):
     """
     Analyzes and prints the data quality profile for all streamgages in the DataFrame
@@ -57,15 +167,7 @@ def diagnose_gage_quality(df, completion_threshold=0.90):
     days_per_wy = pd.Series(water_years).value_counts()
     total_wy_count = len(days_per_wy)
     
-    print("=" * 60)
-    print(f"GAGE DATA QUALITY DIAGNOSTIC (Threshold: {completion_threshold*100:.1f}%)")
-    print(f"Total Gages Analyzed: {df.shape[1]}")
     print(f"Total Water Years in Period: {total_wy_count} ({water_years.min()} to {water_years.max()})")
-    print("=" * 60)
-    print(f"{'Gage ID':<15} | {'Good Water Years':<18} | {'Total Water Years':<18} | {'Status':<10}")
-    print("-" * 60)
-    
-    good_gages_count = 0
     
     for gage in df.columns:
         # Count non-null flow values per water year
@@ -80,21 +182,8 @@ def diagnose_gage_quality(df, completion_threshold=0.90):
         # Count how many water years pass the threshold
         good_years_count = (wy_completion >= completion_threshold).sum()
         
-        # Label it for quick scanning
-        # If it has 0 good years, flag it; if it's perfectly complete, label it excellent
-        if good_years_count == total_wy_count:
-            status = "Excellent"
-            good_gages_count += 1
-        elif good_years_count >= 10:  # Using your previous benchmark as a baseline reference
-            status = "Passing"
-            good_gages_count += 1
-        else:
-            status = "Poor"
-            
-        print(f"{str(gage):<15} | {good_years_count:<18} | {total_wy_count:<18} | {status:<10}")
-        
-    print("=" * 60)
-    print(f"Diagnostic complete. {good_gages_count}/{df.shape[1]} gages have at least 10 quality years.")
+        print(f"good_years_count: {good_years_count:<18}")
+
 
 
 def extract_all_snodas(gdf, date_range, snodas_folder, export_folder, gage_col='gage'):
@@ -505,12 +594,12 @@ def remove_polygon_holes(geometry):
 ################## STEP 1 #####################
 
 # This step searchs the Ucol watershed for USGS gages and finds point locations
-ucol_gage = '09379900'
+ucol_gage = '09380000'
 ucol = nldi.get_basins(ucol_gage)['geometry'].iloc[0]
 ucol_geom = remove_polygon_holes(ucol)
 ucol = gpd.GeoDataFrame(geometry=[ucol_geom], crs=4326)
-ucol.to_file(os.path.join(ncwd, r'data\shapefiles\UCOL.parquet'))
-ucol.to_file(os.path.join(appcwd, r'spatial_data\UCOL.parquet'))
+ucol.to_parquet(os.path.join(ncwd, r'spatial_data\UCOL.parquet'))
+ucol.to_parquet(os.path.join(appcwd, r'spatial_data\UCOL.parquet'))
 
 tiles = make_tiles(ucol, n_tiles_x=3, n_tiles_y=3)
 print(f"Querying NWIS across {len(tiles)} tiles…")
@@ -545,43 +634,118 @@ print(f"Found {len(info)} gages")
 inside_mask = info_gdf.geometry.within(ucol_geom)
 pps = info_gdf[inside_mask].copy().reset_index(drop=True)
 print(f"{len(pps)} gages fall within the basin boundary")
+pps = pps[
+    ~pps['name'].str.lower().str.contains('canal') & 
+    ~pps['name'].str.lower().str.contains('tunnel') &
+    ~pps['name'].str.lower().str.contains('diversion') &
+    ~pps['name'].str.lower().str.contains('ditch')
+]
+print(f"{len(pps)} gages that aren't tunnels or canals or diversions")
 
 # info is already a GeoDataFrame with point geometry
-gages_gdf = pps.set_crs("EPSG:4326")
-gage_ids = gages_gdf['gage'].to_list()
-gages_gdf.to_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_gages.gpkg'))
-gages_gdf.to_parquet(os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet'))
+gages = pps.set_crs("EPSG:4326")
 
 ###################### STEP 2: Delineate watersheds from NLDI #####################
 nldi  = NLDI()
 basins_list = []
-no_work = []
-for id in gage_ids:
+for id in gages['gage'].to_list():
     try:
         basin = nldi.get_basins(id) # watershed polygons
         basins_list.append(basin)
     except:
-        no_work.append(id)
+        print(gages[gages.gage==id]['name'])
         continue
 # the polygons
 basins = pd.concat(basins_list)
+basins['gage'] = basins.index
+basins['gage'] = basins['gage'].apply(fix_gage_id)
 
-# TODO get a bigger DEM for all of UCOL :( and delineate some more
-
-
-# manually delineate the ones that NLDI didn't get
-mdl = gages_gdf[gages_gdf['gage'].isin(no_work)]
+# NLDI didn't get:
+mdl = gages[~gages['gage'].isin(basins.gage)]
 print(len(mdl))
+
+# read these we already delineated
 man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
+man_delin = pd.merge(left=man_delin, right=gages[['name','gage']], on='gage', how='left').dropna()
 
-mdl = mdl[
-    ~mdl['name'].str.lower().str.contains('canal') & 
-    ~mdl['name'].str.lower().str.contains('tunnel')
-]
-print(len(mdl))
+# Now join the manually delineated ones to the basins list
+man_delin = man_delin.set_geometry('geometry')
+man_delin = man_delin.set_crs(4326)
+basins = pd.merge(left=basins, right=gages[['name','gage']], on='gage', how='left')
+basins = pd.concat([basins, man_delin])
+
 # check if we already did these
-mdl = mdl[mdl.gage.isin(man_delin.gage)]
-print(len(mdl))
+mdl = mdl[~mdl.gage.isin(man_delin.gage)]
+print(len(mdl), mdl.gage.unique())
+
+#############################################################################
+# GET STREAMFLOW AND MERGE DIVERSION DATA
+#############################################################################
+from collections import defaultdict
+
+# skip previous steps by reading these
+# gages = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/ucol_gages.gpkg'))
+# basins = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
+
+# make dict for names
+name_dict = gages.set_index('gage')['name'].to_dict()
+# Get all streamflow
+date_range = ("1979-10-01", "2025-09-30")
+#flow = NWIS.get_streamflow(gages['gage'].to_list(), date_range, freq="dv") # comes in cubic meters per second
+
+# send to csv so you don't have to run that again
+big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
+#flow.to_csv(big_flow_path, index_label='date')
+flow = pd.read_csv(big_flow_path).set_index('date')
+flow.index = pd.to_datetime(flow.index)
+
+# fix timeseries index
+flow.index = flow.index.normalize().tz_localize(None)
+
+# rename columns
+rename_dict = {}
+for usgsgage in flow.columns:
+    gage = fix_gage_id(usgsgage)
+    rename_dict[usgsgage] = gage
+flow = flow.rename(columns=rename_dict)
+
+# just doesn't work for some?
+nwis_fail = gages[~gages['gage'].isin(flow.columns)]
+nwis_fail = add_usgs_prefix(nwis_fail['gage'].to_list())
+
+df, metadata = waterdata.get_daily(
+    monitoring_location_id=nwis_fail,
+    parameter_code='00060',
+    time=f'{date_range[0]}/{date_range[1]}'
+)
+
+# add all the ones that didn't work
+for usgsgage in df['monitoring_location_id'].unique():
+    gage = fix_gage_id(usgsgage)
+    sub_df = df[df['monitoring_location_id']==usgsgage][['time', 'value']]
+    sub_df = sub_df.rename(columns={'value':gage})
+    sub_df = sub_df.set_index('time')
+    flow[gage] = sub_df[gage] * 0.0283168 # convert to cms
+
+# get basin area
+basins.geometry = basins.geometry.to_crs(5070)
+basins['area_m2'] = basins.area
+
+# save all the basins and gages
+print(f'{len(basins)} basins, {len(gages)} gages')
+
+# check for ones with streamflow for the app
+keep = []
+for gage in flow.columns:
+    if flow[gage].notna().sum() >= 365:
+        keep.append(gage)
+
+basins = basins[basins['gage'].isin(keep)]
+gages = gages[gages['gage'].isin(keep)]
+print(f'{len(basins)} basins, {len(gages)} gages')
+print('basins with no gage:', set(basins.gage).difference(set(gages.gage)))
+need_basin = set(gages.gage).difference(set(basins.gage))
+print('gages with no basin:', set(gages.gage).difference(set(basins.gage))) # should be none
 
 dem_path = os.path.join(ncwd, r'data\terrain\dem_ucol_south\output_USGS30m.tif')
 terrain_folder = os.path.join(ncwd, r'data\terrain\dem_ucol_south')
@@ -597,86 +761,43 @@ if not os.path.exists(acc_path):
         output_folder=terrain_folder
     )
 
-# Step 2: Pass those paths into your delineation routine whenever needed
-watershed_polygons_gdf = delineate_watersheds_preprocessed(
-    fdir_path=fdir_path,
-    acc_path=acc_path,
-    points_gdf=mdl,
-    gage_col='gage'
-)
+need_basin = gages[gages.gage.isin(need_basin)]
 
-man_delin = gpd.GeoDataFrame().from_dict(watershed_polygons_gdf)
+# delineate
+# watershed_polygons_gdf = delineate_watersheds_preprocessed(
+#     fdir_path=fdir_path,
+#     acc_path=acc_path,
+#     points_gdf=need_basin,
+#     gage_col='gage'
+# )
+# man_delin = gpd.GeoDataFrame().from_dict(watershed_polygons_gdf)
+# man_delin.geometry.crs = 4326
+# man_delin = pd.merge(left=man_delin, right=gages[['gage', 'name']], on='gage', how='left')
+#man_delin.to_file(os.path.join(ncwd, r'data/shapefiles/man_delin2.shp'))
+man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin2.shp'))
 
-# drop the multipolygon
-man_delin['geometry'] = man_delin['geometry'].apply(
-    lambda x: x[0] if isinstance(x, np.ndarray) else x
-)
-
-# Now set the geometry
-man_delin = man_delin.set_geometry('geometry')
-man_delin = man_delin.set_crs(4326)
-#man_delin.to_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
-#man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
-
-basins.geometry = basins.geometry.to_crs(4326)
-basins['gage'] = basins.index
-basins['gage'] = basins['gage'].apply(fix_gage_id)
-basins.reset_index(drop=True, inplace=True)
+# add to basins...
+basins = basins.to_crs(4326)
+print(len(basins))
 basins = pd.concat([basins, man_delin])
-basins = basins[basins.gage.isin(gages_gdf.gage)]
+print(len(basins))
 
-# save
-basins.to_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
-basins.to_parquet(os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet'))
+# Enforce that they are the same
+basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
+gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 
-#############################################################################
-# GET STREAMFLOW AND MERGE DIVERSION DATA
-#############################################################################
-from collections import defaultdict
+basins = basins.sort_values(by='gage').reset_index(drop=True)
+gages = gages.sort_values(by='gage').reset_index(drop=True)
+if all(basins.gage == gages.gage):
+    basins.to_parquet(basins_path)
+    gages.to_parquet(gages_path)
+    basins.to_parquet(os.path.join(ncwd, r'spatial_data/all_UCOL_basins.parquet'))
+    gages.to_parquet(os.path.join(ncwd, r'spatial_data/all_UCOL_gages.parquet'))
 
-# skip previous steps by reading these
-gages_gdf = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/ucol_gages.gpkg'))
-basins = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
-# make dict for names
-name_dict = gages_gdf.set_index('gage')['name'].to_dict()
-basins['name'] = basins['gage'].map(name_dict)
-# Get all streamflow
-date_range = ("2003-10-01", "2025-09-30")
-flow = NWIS.get_streamflow(gages_gdf['gage'].to_list(), date_range, freq="dv")
-
-# fix timeseries index
-flow.index = flow.index.normalize().tz_localize(None)
-
-# rename columns
-rename_dict = {}
-for usgsgage in flow.columns:
-    gage = fix_gage_id(usgsgage)
-    rename_dict[usgsgage] = gage
-flow = flow.rename(columns=rename_dict)
-
-# just doesn't work for some?
-nwis_fail = gages_gdf[~gages_gdf['gage'].isin(flow.columns)]
-nwis_fail = add_usgs_prefix(nwis_fail['gage'].to_list())
-
-df, metadata = waterdata.get_daily(
-    monitoring_location_id=nwis_fail,
-    parameter_code='00060',
-    time=f'{date_range[0]}/{date_range[1]}'
-)
-
-# get basin area
-basins.geometry = basins.geometry.to_crs(5070)
-basins['area_m2'] = basins.area
-# add all the ones that didn't work
-for usgsgage in df['monitoring_location_id'].unique():
-    gage = fix_gage_id(usgsgage)
-    sub_df = df[df['monitoring_location_id']==usgsgage][['time', 'value']]
-    sub_df = sub_df.rename(columns={'value':gage})
-    sub_df = sub_df.set_index('time')
-    flow[gage] = sub_df[gage] * 0.0283168
 
 # DIVERSIONS
 # COLUMN = siteID
+basins = gpd.read_file(basins_path)
 dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
 
 # this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
@@ -730,8 +851,23 @@ appDir = os.path.join(appcwd, r'timeseries') # does not have each individual div
 basins.geometry = basins.geometry.to_crs(4326)
 joined = gpd.sjoin(dvrs, basins, how="inner", predicate="within")
 
+import time
+current_time = time.time()
+seconds_in_1_hours = 60 * 60
 # send to csvs
-for gage in flow.columns:
+for gage in basins.gage:
+    out_path_small = os.path.join(appDir, f"{gage}.csv")
+    
+    # Check if the file exists first
+    if os.path.exists(out_path_small):
+        # Get the last modification time of the file
+        file_mod_time = os.path.getmtime(out_path_small)
+        
+        # If the file was modified less than 24 hours ago, skip it
+        if (current_time - file_mod_time) < seconds_in_1_hours:
+            print(f"Skipping {gage}.csv - updated within the last 24 hours.")
+            continue
+
 
     df = flow[[gage]]
     df = df.rename(columns={gage:'Q_cms'})
@@ -831,6 +967,8 @@ for gage in flow.columns:
             left_index=True, 
             how='inner'
         )
+        if len(combined_df) < 1:
+            raise Exception('merge failed: df has no rows')
 
         # 5. aggregate by type
             # Aggregate columns matching each diversion type
@@ -842,9 +980,6 @@ for gage in flow.columns:
         combined_df = df
         
     # 4. Save the new CSV
-    if len(combined_df) < 1:
-        raise Exception('merge failed: df has no rows')
-
     out_path = os.path.join(wdvrsDir, f"{gage}.csv")
     combined_df.to_csv(out_path, index_label='date')
 
@@ -861,115 +996,182 @@ for gage in flow.columns:
 
     print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
 
-# Now we need to select basins for training, testing, and implementation
-from scipy.optimize import milp, LinearConstraint, Bounds
+for gage in basins.gage:
+    out_path_small = os.path.join(appDir, f"{gage}.csv")
+    df = pd.read_csv(out_path_small, parse_dates=['date'])
+    try:
+        if any(df['Q_NAT_cfs'] < 0):
+            print(gage)
+    except:
+        continue
 
-def select_max_water_years_global(basins_gdf, flow_df, gage_col='gage'):
-    """
-    Selects a non-nested subset of basins within the Upper Colorado River Basin
-    using True Global Optimization (ILP) to maximize total basin-water-years.
-    """
-    num_basins = len(basins_gdf)
-    # -------------------------------------------------------------------------
-    # 2. Calculate Water Year Completeness Weights
-    # -------------------------------------------------------------------------
-    water_years = flow_df.index.to_series().apply(lambda d: d.year + 1 if d.month >= 10 else d.year)
-    
-    good_years_dict = {}
-    for col in flow_df.columns:
-        if col in basins_gdf[gage_col].values:
-            yearly_complete = flow_df[col].groupby(water_years).apply(lambda x: x.notna().mean() >= 0.70) # Using your 0.80 threshold
-            good_years_dict[col] = yearly_complete.sum()
+#### GRAB CLIMATE FORCING ####
+basins = gpd.read_parquet(basins_path)
+gages = gpd.read_parquet(gages_path)
 
-    basins_gdf['good_wy'] = basins_gdf[gage_col].map(good_years_dict).fillna(0)
+import pygridmet as gridmet
+import rioxarray
+from shapely.geometry import mapping
 
-    # -------------------------------------------------------------------------
-    # 3. Build Conflict Matrix (Nesting Constraints)
-    # -------------------------------------------------------------------------
-    print("Analyzing spatial relationships to build global constraints...")
-    
-    # We need to construct an inequality matrix A where each row represents a conflict.
-    # If Basin i and Basin j intersect, we append a constraint: x_i + x_j <= 1
-    # This prevents the solver from selecting both.
-    constraints_list = []
-    
-    # Define a minimum overlap area threshold in square meters.
-    # For a 100m misalignment along a typical boundary, we can look at the total overlap area.
-    # Alternatively, you can check if the overlap constitutes more than e.g., 1% of the smaller basin.
-    AREA_CUSHION_M2 = 100 * 100  # 10,000 m² (equivalent to a 100m x 100m grid cell)
+# smaller date range for this
+date_range = ("2003-10-01", "2025-09-30")
 
-    basins_list = basins_gdf.to_dict('records')
-    for i in range(num_basins):
-        poly_i = basins_list[i]['geometry']
+# Variables requested from GRIDMET service
+variables = ['pr', 'srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd', 'pet']
+
+# Define aggregation types per variable
+mean_vars = ['srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd',]
+sum_vars = ['pet', 'pr']
+
+# Run the SNODAS extraction ONCE up front
+
+#############
+# You ran this for data\shapefiles\UCOL_headwaters_sheds.shp already. In snodas_processed
+#############
+gages_done = []
+for fol in [1,2]:
+    snodas_export_folder = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed{fol}'
+    df = pd.read_csv(os.path.join(snodas_export_folder, 'SNODAS_SWE_WY2025.csv'))
+    gages_done = gages_done + df.columns.to_list()
         
-        for j in range(i + 1, num_basins):
-            poly_j = basins_list[j]['geometry']
+gages_done.remove('date')
+gages_done = set(gages_done)
+print(f'{len(gages_done)} with snodas')
+left2do = set(basins.gage).difference(gages_done)
+print(f'{len(left2do)} without snodas')
+
+basins2do = basins[basins.gage.isin(left2do)]
+
+snodas_folder = r"N:\Research\Kampf\Private\KeenanW\SNODAS"
+snodas_export_folder = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed3'
+#extract_all_snodas(basins2do, date_range, snodas_folder, snodas_export_folder, 'gage')
+
+snodas_dfs = []
+years = list(range(pd.to_datetime(date_range[0]).year+1, pd.to_datetime(date_range[1]).year + 1))
+
+for fol in [1,2,3]:
+    snodas_export_folder = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed{fol}'
+    for year in years:
+        snodas_dfs.append(pd.read_csv(os.path.join(snodas_export_folder, f'SNODAS_SWE_WY{year}.csv')))
+
+snodas_lookup = pd.concat(snodas_dfs)
+snodas_lookup['date'] = pd.to_datetime(snodas_lookup['date'])
+snodas_lookup = snodas_lookup.set_index('date')
+snodas_lookup = snodas_lookup.sort_values(by='date')
+
+# Loop over each individual watershed
+for idx, row in basins.iterrows():
+
+    gage = str(row['gage'])
+    outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
+    outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow7\{gage}.csv'
+
+    if os.path.exists(outpath) and os.path.exists(outpath2):
+        print(f'{gage} already done')
+        continue
+
+    # check for snodas
+    try:
+        gage_swe_series = snodas_lookup[gage].dropna()
+        if gage_swe_series.empty or any(gage_swe_series.isna()):
+            raise Exception('no snow data')
+    except:
+        print(f'no snodas for {gage}')
+        continue
+
+    if not os.path.exists(outpath):
+
+        print(f"downloading gridmet: {gage}...")
+
+        # Isolate the single watershed geometry and wrap it into a standalone GeoDataFrame
+        single_gdf = gpd.GeoDataFrame([row], crs=basins.crs)
+
+        # 1. Fetch gridded
+        try:
+            ds = gridmet.get_bygeom(
+                geometry=single_gdf.geometry.iloc[0],
+                dates=date_range,
+                crs=single_gdf.crs,
+                variables=variables,
+            )
+        except:
+            print(f'{gage} failed gridmet download')
+            continue
+        # lets look at one
+        # da_variable = ds["pr"]
+        # da_first_date = da_variable.isel(time=0)
+        # # 4. Export to GeoTIFF
+        # output_tif = "N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\spatial_data\gridmet_test.tif"
+        # da_first_date.rio.to_raster(output_tif)
+        
+        # 2. Write spatial dimensions to ensure rioxarray can parse coordinates
+        if "rio" not in ds.dims:
+            ds = ds.rio.write_crs(basins.crs)
             
-            # First do a fast check: do they even touch/overlap?
-            if poly_i.intersects(poly_j):
-                # Calculate the exact geometric intersection polygon
-                intersection_poly = poly_i.intersection(poly_j)
-                
-                # Only flag as a conflict if the intersection area exceeds our cushion
-                # (Note: Your GeoDataFrame must be in a metric projected CRS like UTM or Albers)
-                if intersection_poly.area > AREA_CUSHION_M2:
-                    
-                    # Optional secondary check: Ensure it's not just a long, thin sliver 
-                    # by checking if it represents more than 1% of either basin's total area.
-                    min_basin_area = min(poly_i.area, poly_j.area)
-                    if intersection_poly.area / min_basin_area > 0.01:
-                        
-                        row = np.zeros(num_basins)
-                        row[i] = 1
-                        row[j] = 1
-                        constraints_list.append(row)
-
-    # -------------------------------------------------------------------------
-    # 4. Set Up and Solve the Integer Linear Program (ILP)
-    # -------------------------------------------------------------------------
-    print("Solving Global Optimization Problem...")
-    
-    # The solver *minimizes* c^T * x. To maximize, we invert the weights (negative values)
-    c = -basins_gdf['good_wy'].values
-    
-    # Define bounds: each basin variable x must be 0 or 1 (Binary integer)
-    bounds = Bounds(0, 1)
-    integrality = np.ones(num_basins) # 1 means integer variable
-    
-    if len(constraints_list) > 0:
-        A = np.array(constraints_list)
-        # For every conflict row, the sum of selections must be less than or equal to 1
-        ub = np.ones(A.shape[0])
-        lb = np.zeros(A.shape[0]) # can be 0 or 1
-        constraints = LinearConstraint(A, lb, ub)
-    else:
-        constraints = []
-
-    # Run the Mixed-Integer Linear Programming solver
-    res = milp(c=c, bounds=bounds, constraints=constraints, integrality=integrality)
-    
-    if not res.success:
-        raise RuntimeError(f"Optimization failed: {res.message}")
+        daily_records = []
         
-    # Extracted selections (rounded cleanly to 0 or 1)
-    selected_indices = np.where(np.round(res.x) == 1)[0]
-    selected_gages = basins_gdf.iloc[selected_indices][gage_col].tolist()
+        # 4. Spatially aggregate over grid coordinates (x and y dimensions)
+        # Means across pixels
+        ds_mean = ds[mean_vars].mean(dim=["lon", "lat"], skipna=True)
+        # Sums across pixels
+        ds_sum = ds[sum_vars].sum(dim=["lon", "lat"], skipna=True)
+        
+        # Combine aggregated structures into a single pandas DataFrame
+        df_mean = ds_mean.to_dataframe().reset_index()
+        df_sum = ds_sum.to_dataframe().reset_index()
+        
+        # Merge mean and sum frames along the 'time' index
+        gr_df = pd.merge(df_mean, df_sum, on='time')
+        
+        # Clean up headers to show aggregation style explicitly (Optional)
+        rename_dict = {v: f"{v}_mean" for v in mean_vars}
+        rename_dict['time'] = 'date'
+        rename_dict.update({v: f"{v}_sum" for v in sum_vars})
+        gr_df = gr_df.rename(columns=rename_dict)
 
-    # -------------------------------------------------------------------------
-    # 5. Map results back to the original DataFrame
-    # -------------------------------------------------------------------------
-    basins_gdf['model_category'] = 'no-model (nested or excluded)'
-    basins_gdf.loc[basins_gdf[gage_col].isin(selected_gages), 'model_category'] = 'train_test'
-    basins_gdf['good_water_years'] = basins_gdf[gage_col].map(good_years_dict).fillna(0)
-    
-    total_selected_years = basins_gdf[basins_gdf['model_category'] == 'train_test']['good_water_years'].sum()
-    
-    print(f"\nOptimization Complete!")
-    print(f"Selected {len(selected_gages)} non-nested basins.")
-    print(f"True Maximized High-Quality Basin-Water-Years: {int(total_selected_years)} years.")
-    
-    return basins_gdf
+        # Set the time index
+        gr_df = gr_df.set_index('date')
+        
+        # Map the snodas series back to the main dataframe
+        gr_df['swe'] = gage_swe_series
+        gr_df = gr_df.rename(columns={'swe':'swe_sum'})
+        gr_df.to_csv(outpath, index_label='date')
 
+    elif not os.path.exists(outpath2):
+        print(f'skipping gridmet download {gage}, merging flow')
+
+        gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
+        # get rid of two useless columns
+        if 'spatial_ref_x' in gr_df.columns and 'spatial_ref_y' in gr_df.columns:
+            gr_df = gr_df.drop(columns=['spatial_ref_x', 'spatial_ref_y'])
+
+        # merge it with the flow data from here:
+        flow_path = os.path.join(appDir, f"{gage}.csv")
+        flow_df = pd.read_csv(flow_path, parse_dates=['date'], index_col='date')
+
+        # gap fill the flow data
+        Q_col = f'Q_cfs'
+        first_valid = flow_df[Q_col].first_valid_index()
+        last_valid = flow_df[Q_col].last_valid_index()
+
+        # shorten to period of record
+        flow_df = flow_df.loc[first_valid:last_valid]
+
+        # interpolate missing data at one week
+        flow_df = flow_df.interpolate(method='linear', limit=7)
+        diagnose_gage_quality(flow_df[[Q_col]])
+
+        gr_df = pd.merge(left=gr_df, right=flow_df, how='left', left_index=True, right_index=True)
+        gr_df = gr_df.asfreq('D')
+        
+        gr_df.to_csv(outpath2, index_label='date')
+
+
+    
+    
+
+################################################
+# MAYBE USE THIS TO SELECT TRAIN AND TEST
 basins.geometry = basins.geometry.to_crs(9822)
 results_df = select_max_water_years_global(basins, flow)
 results_df.to_file(os.path.join(ncwd, r'data/shapefiles/basin_selection_results.gpkg'))
@@ -988,7 +1190,7 @@ headwaters.to_file(headwaters_path2)
 headwaters = gpd.read_file(headwaters_path)
 
 # Save to file
-gages_headwaters = gages_gdf[gages_gdf.index.isin(headwaters['gage'])]
+gages_headwaters = gages[gages.index.isin(headwaters['gage'])]
 gages_headwaters.to_file(join(ncwd, r"data\shapefiles\UCOL_headwater_gages.gpkg"), driver="GPKG")
 
 # add in camels
@@ -996,118 +1198,6 @@ gages_headwaters.to_file(join(ncwd, r"data\shapefiles\UCOL_headwater_gages.gpkg"
 
 # maybe later we will grab data for these
 parents = basins[~basins.gage.isin(headwaters.gage)]
-
-
-#### NOTE TO SELF ####
-# Seems like most of the no work list is canals or gages that only measure water quality (no cfs)
-import pygridmet as gridmet
-import rioxarray
-from shapely.geometry import mapping
-
-gdf = headwaters
-
-# Variables requested from GRIDMET service
-variables = ['pr', 'srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd', 'pet']
-
-# Define aggregation types per variable
-mean_vars = ['srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd',]
-sum_vars = ['pet', 'pr']
-
-# Run the SNODAS extraction ONCE up front
-
-#############
-# You ran this for data\shapefiles\UCOL_headwaters_sheds.shp already. In snodas_processed
-#############
-keep = gpd.read_file(r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\shapefiles\all_UCOL_basins.gpkg')
-rmv = gpd.read_file(r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\shapefiles\UCOL_headwaters_sheds.gpkg')
-rmv2 = gpd.read_file(r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\shapefiles\basin_selection_results.gpkg')
-print(len(keep))
-keep = keep[~keep['gage'].isin(rmv['gage'])]
-print(len(keep))
-keep = keep[~keep['gage'].isin(rmv2['gage'])]
-print(len(keep))
-
-
-snodas_folder = r"N:\Research\Kampf\Private\KeenanW\SNODAS"
-snodas_export_folder = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed2'
-extract_all_snodas(gdf, date_range, snodas_folder, snodas_export_folder, 'gage')
-
-snodas_dfs = []
-years = list(range(pd.to_datetime(date_range[0]).year, pd.to_datetime(date_range[1]).year + 1))
-for year in years:
-    snodas_dfs.append(pd.read_csv(os.path.join(snodas_export_folder, f'SNODAS_SWE_{year}.csv')))
-
-snodas_lookup = pd.concat(snodas_dfs)
-snodas_lookup['time'] = pd.to_datetime(snodas_lookup['time'])
-snodas_lookup = snodas_lookup.rename(columns={'time':'date'})
-snodas_lookup = snodas_lookup.set_index('date')
-
-gdf = keep
-# Loop over each individual watershed
-for idx, row in gdf.iterrows():
-    gage_id = str(row['gage'])
-    print(f"Processing gage: {gage_id}...")
-    
-    # Isolate the single watershed geometry and wrap it into a standalone GeoDataFrame
-    single_gdf = gpd.GeoDataFrame([row], crs=gdf.crs)
-
-    # 1. Fetch gridded
-    ds = gridmet.get_bygeom(
-        geometry=single_gdf.geometry.iloc[0],
-        dates=date_range,
-        crs=single_gdf.crs,
-        variables=variables,
-    )
-    
-    # 2. Write spatial dimensions to ensure rioxarray can parse coordinates
-    if "rio" not in ds.dims:
-        ds = ds.rio.write_crs(gdf.crs)
-        
-    # 3. Clip the bounding box netCDF precisely down to the polygon edge mask
-    # geometry selection ensures we don't include exterior square cells
-    clipped_ds = ds.rio.clip(
-        single_gdf.geometry.apply(mapping), 
-        crs=single_gdf.crs, 
-        all_touched=True
-    )
-    
-    daily_records = []
-    
-    # 4. Spatially aggregate over grid coordinates (x and y dimensions)
-    # Means across pixels
-    ds_mean = clipped_ds[mean_vars].mean(dim=["lon", "lat"], skipna=True)
-    # Sums across pixels
-    ds_sum = clipped_ds[sum_vars].sum(dim=["lon", "lat"], skipna=True)
-    
-    # Combine aggregated structures into a single pandas DataFrame
-    df_mean = ds_mean.to_dataframe().reset_index()
-    df_sum = ds_sum.to_dataframe().reset_index()
-    
-    # Merge mean and sum frames along the 'time' index
-    gr_df = pd.merge(df_mean, df_sum, on='time')
-    
-    # Clean up headers to show aggregation style explicitly (Optional)
-    rename_dict = {v: f"{v}_mean" for v in mean_vars}
-    rename_dict['time'] = 'date'
-    rename_dict.update({v: f"{v}_sum" for v in sum_vars})
-    gr_df = gr_df.rename(columns=rename_dict)
-
-    # Set the time index
-    gr_df = gr_df.set_index('date')
-    
-    # EXTRACTION FIX: Instead of opening files, instantly pull the column from memory!
-    # Pull the pre-calculated time series matching this specific gage ID
-    gage_swe_series = snodas_lookup[row[gage_col]] 
-    
-    # Map the series back to the main dataframe
-    gr_df['swe'] = gage_swe_series
-    gr_df = gr_df.rename(columns={'swe':'swe_sum'})
-
-    # get streamflow
-    flow_series = flow[f'USGS-{gage_id}']
-    gr_df['Q_cfs'] = flow_series
-
-    gr_df.to_csv(fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\unfilled\{gage_id}.csv')
 
 
 
