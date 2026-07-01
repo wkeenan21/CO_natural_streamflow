@@ -72,7 +72,7 @@ with ui.layout_column_wrap(width=1/2):
                 # -----------------------------------------------------------
                 # Clear out old watershed and diversions layers
                 for layer in list(m.layers):
-                    if layer.name in ["Active Watershed", "Active Diversions"]:
+                    if layer.name in ["Active Watershed", "Diversions"]:
                         m.remove_layer(layer)
                 
                 # Filter the basins dataframe for the clicked gage ID
@@ -99,25 +99,33 @@ with ui.layout_column_wrap(width=1/2):
                     selected_dvrs = gpd.clip(dvrs, selected_basin_df)
 
                     if not selected_dvrs.empty:
-                        # Define style callback to color individual point records by siteUse
-                        # Use point_style_callback to explicitly define point style, not style_callback
-                        def style_diversion(feat):
-                            site_use = feat['properties'].get('siteUse', '')
-                            color = CU_COLORS.get(site_use, '#666666') # default fallback to grey
-                            return {
-                                "radius": 4,
-                                "color": color,
-                                "fillColor": color,
-                                "fillOpacity": 0.7,
-                                "weight": 1
-                            }
+                        
+                        # 1. Map your colors directly into the GeoDataFrame as new columns
+                        selected_dvrs['fillColor'] = selected_dvrs['siteUse'].map(CU_COLORS).fillna('#666666')
+                        selected_dvrs['color'] = selected_dvrs['fillColor']
+                        selected_dvrs['radius'] = 4
+                        selected_dvrs['fillOpacity'] = 0.7
+                        selected_dvrs['weight'] = 1
 
+                        print(selected_dvrs['fillColor'])
+
+                        # 2. Build the layer using a static configuration
                         diversions_layer = L.GeoData(
                             geo_dataframe=selected_dvrs,
-                            # style_callback=style_diversion,
-                            point_style_callback=style_diversion,
-                            name="Active Diversions"
+                            point_style={"type": "circle"}, 
+                            
+                            # We pass a structural layout dict instead of a dynamic callback function
+                            style={
+                                "radius": 4,
+                                "fillOpacity": 0.2,
+                                "weight": 1,
+                                "color":"#666666"
+                                # ipyleaflet will automatically bind individual row colors 
+                                # if they exist as properties in the geo_dataframe features
+                            },
+                            name="Diversions"
                         )
+                        
                         m.add_layer(diversions_layer)
                 # -----------------------------------------------------------
                 
@@ -126,7 +134,7 @@ with ui.layout_column_wrap(width=1/2):
                 
                 new_popup = L.Popup(
                     location=lat_lon,
-                    child=widgets.HTML(value=f"<b>{name}</b><br>Gage:<b>USGS-{gage}</b><br>"),
+                    child=widgets.HTML(value=f"<b>{name}<br>USGS-{gage}</b><br>"),
                     close_button=True, auto_close=True, close_on_escape_key=True
                 )
                 m.add(new_popup)
