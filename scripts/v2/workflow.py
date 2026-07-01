@@ -683,10 +683,6 @@ print(len(mdl), mdl.gage.unique())
 #############################################################################
 from collections import defaultdict
 
-# skip previous steps by reading these
-# gages = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/ucol_gages.gpkg'))
-# basins = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/all_UCOL_basins.gpkg'))
-
 # make dict for names
 name_dict = gages.set_index('gage')['name'].to_dict()
 # Get all streamflow
@@ -797,7 +793,14 @@ if all(basins.gage == gages.gage):
 
 # DIVERSIONS
 # COLUMN = siteID
-basins = gpd.read_file(basins_path)
+###################
+# SKIP STEPS BY READING HERE
+basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
+gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
+basins = gpd.read_parquet(basins_path)
+gages = gpd.read_parquet(gages_path)
+#####################
+
 dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
 
 # this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
@@ -822,14 +825,12 @@ dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
 # gageID column = gage
 # WIDE CSV FOR DIVERSION DATA IN CFS
 # COLUMN HEADERS = siteID
-dvrsFlow = pd.read_csv(os.path.join(ncwd, "data\diversion\processed\processed_data\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
-dvrsFlow = dvrsFlow.rename(columns={'Date':'date'})
+
+# 1980 to 2025
+dvrsFlow = pd.read_csv(os.path.join(ncwd, "data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+dvrsFlow = dvrsFlow.rename(columns={'datetime':'date'})
 dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
-# merge with 2022 to 2025
-dvrsFlow2 = pd.read_csv(os.path.join(ncwd, "data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
-dvrsFlow2 = dvrsFlow2.rename(columns={'datetime':'date'})
-dvrsFlow2['date'] = pd.to_datetime(dvrsFlow2['date'])
-dvrsFlow = pd.concat([dvrsFlow, dvrsFlow2])
+dvrsFlow = pd.concat([dvrsFlow, dvrsFlow])
 
 # Ensure date columns are datetime objects for proper merging
 dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
@@ -856,6 +857,7 @@ current_time = time.time()
 seconds_in_1_hours = 60 * 60
 # send to csvs
 for gage in basins.gage:
+
     out_path_small = os.path.join(appDir, f"{gage}.csv")
     
     # Check if the file exists first

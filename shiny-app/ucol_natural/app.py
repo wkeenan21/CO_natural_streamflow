@@ -12,8 +12,15 @@ from shinywidgets import render_widget
 ucol = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\UCOL.parquet").to_crs(epsg=4326)
 gages = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_gages.parquet").to_crs(epsg=4326)
 basins = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_basins.parquet").to_crs(epsg=4326)
+dvrs = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\ucrb_diversion_master_table.parquet").to_crs(epsg=4326) 
 
 ts_dir = r'shiny-app\ucol_natural\timeseries'
+
+# Global Color Mapping for Diversions / Consumptive Use
+CU_COLORS = {
+    'irrigation': '#e6ab02', 'municipal': '#7570b3', 'interbasin': '#d95f02',
+    'industrial': '#666666', 'hydropower': '#1b7837', 'intrabasin': '#a6761d', 'transbasin': '#e7298a'
+}
 
 # Calculate bounds and center
 minx, miny, maxx, maxy = ucol.total_bounds
@@ -61,11 +68,11 @@ with ui.layout_column_wrap(width=1/2):
                 selected_gage.set({"gage": gage, "name": name})
                 
                 # -----------------------------------------------------------
-                # DYNAMIC WATERSHED HANDLING
+                # DYNAMIC WATERSHED & DIVERSIONS HANDLING
                 # -----------------------------------------------------------
-                # Look for an existing watershed layer and clear it out first
+                # Clear out old watershed and diversions layers
                 for layer in list(m.layers):
-                    if layer.name == "Active Watershed":
+                    if layer.name in ["Active Watershed", "Active Diversions"]:
                         m.remove_layer(layer)
                 
                 # Filter the basins dataframe for the clicked gage ID
@@ -87,6 +94,31 @@ with ui.layout_column_wrap(width=1/2):
                     )
                     # Add it to the map canvas dynamically
                     m.add_layer(watershed_layer)
+
+                    # Spatial filter: clip diversions to inside the active watershed
+                    selected_dvrs = gpd.clip(dvrs, selected_basin_df)
+
+                    if not selected_dvrs.empty:
+                        # Define style callback to color individual point records by siteUse
+                        # Use point_style_callback to explicitly define point style, not style_callback
+                        def style_diversion(feat):
+                            site_use = feat['properties'].get('siteUse', '')
+                            color = CU_COLORS.get(site_use, '#666666') # default fallback to grey
+                            return {
+                                "radius": 4,
+                                "color": color,
+                                "fillColor": color,
+                                "fillOpacity": 0.7,
+                                "weight": 1
+                            }
+
+                        diversions_layer = L.GeoData(
+                            geo_dataframe=selected_dvrs,
+                            # style_callback=style_diversion,
+                            point_style_callback=style_diversion,
+                            name="Active Diversions"
+                        )
+                        m.add_layer(diversions_layer)
                 # -----------------------------------------------------------
                 
                 coords = feature['geometry']['coordinates']
@@ -102,6 +134,18 @@ with ui.layout_column_wrap(width=1/2):
             gages_layer.on_click(gage_click)
             control = L.LayersControl(position="topright")
             m.add_control(control)
+
+            # # Create Legend
+            # legend = L.LegendControl(
+            #     {
+            #         "Streamgage": "#0000ff",  # Gage color
+            #         **{name: color for name, color in CU_COLORS.items()},
+            #     },
+            #     name="",
+            #     position="bottomright",
+            # )
+            # m.add_control(legend)
+            
             m.fit_bounds(bounds)
             return m
 
@@ -137,40 +181,30 @@ with ui.layout_column_wrap(width=1/2):
 
         @reactive.calc
         def get_filtered_data():
-            # grab user inputs
             gage_info = selected_gage.get()
             unit_choice = input.units()
             start_date, end_date = input.date_range()
 
-            # at start gage_info is none 
             if gage_info is None:
                 return None
-            # load path and gage
             gage = gage_info["gage"]
             csv_path = os.path.join(ts_dir, f"{gage}.csv")
-            # hopefully this never triggers
             if not os.path.exists(csv_path):
                 return None
 
-            # read csv
             df = pd.read_csv(csv_path)
             df['date'] = pd.to_datetime(df['date'])
             df.index = df['date']
 
-            # first drop all the dates with no streamflow
             Q_col = f'Q_{unit_choice}'
             first_valid = df[Q_col].first_valid_index()
             last_valid = df[Q_col].last_valid_index()
 
-            # If the column is completely empty, you might want to handle it or clear the df
             if first_valid is not None and last_valid is not None:
-                # Slice the dataframe to keep everything between (and including) those indexes
                 df = df.loc[first_valid:last_valid]
             else:
-                # Handle the edge case where the entire column is NaN
                 df = df.iloc[0:0]
             
-            # now filter in between user specified dates
             mask = (df['date'] >= pd.to_datetime(start_date)) & (df['date'] <= pd.to_datetime(end_date))
             filtered_df = df.loc[mask].copy()
 
@@ -180,7 +214,6 @@ with ui.layout_column_wrap(width=1/2):
             if filtered_df.empty:
                 return filtered_df, (first_valid_str, last_valid_str)
 
-            # now filter for units
             unit_cols = [col for col in df.columns if col.endswith(f'_{unit_choice}')]
             columns = ['date'] + unit_cols
             filtered_df = filtered_df[columns]
@@ -189,11 +222,6 @@ with ui.layout_column_wrap(width=1/2):
 
         @render_widget
         def plot_flows():
-            CU_COLORS = {
-                'irrigation': '#e6ab02', 'municipal': '#7570b3', 'interbasin': '#d95f02',
-                'industrial': '#666666', 'hydropower': '#1b7837', 'intrabasin': '#a6761d', 'transbasin': '#e7298a'
-            }
-            
             gage_info = selected_gage.get()
             unit = input.units()
             
@@ -208,7 +236,6 @@ with ui.layout_column_wrap(width=1/2):
                                   yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
                 return fig
 
-            # now grab df    
             df, valid_range = get_filtered_data()
             
             if df.empty:
@@ -226,9 +253,7 @@ with ui.layout_column_wrap(width=1/2):
             gage = gage_info['gage']
             
             fig = go.Figure()
-
             df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
-            print(df['date'].min())
 
             cu_types = ['irrigation', 'municipal', 'interbasin', 'industrial', 'hydropower', 'intrabasin', 'transbasin']
             cu_labels = {
@@ -244,8 +269,6 @@ with ui.layout_column_wrap(width=1/2):
             for cu_type in cu_types:
                 col_name = f'{cu_type}_{unit}'
                 if col_name in df.columns and df[col_name].sum() != 0:
-                    
-                    # Determine the correct stack group based on whether it's an import or export
                     if cu_type == 'transbasin':
                         stack_name = 'positive_stack'
                     else:
@@ -255,10 +278,7 @@ with ui.layout_column_wrap(width=1/2):
                         x=df['date'], y=df[col_name],
                         name=cu_labels[cu_type], mode='lines',
                         line=dict(width=0.5, color=CU_COLORS.get(cu_type, '#cccccc')),
-                        
-                        # Use the dynamically assigned stack group here
                         stackgroup=stack_name, 
-                        
                         fillcolor=CU_COLORS.get(cu_type, '#cccccc'), opacity=0.6,
                         hovertemplate='<b>%{hovertext}</b><br>Flow: %{y:.1f} ' + unit + '<extra></extra>',
                         hovertext=[cu_labels[cu_type]] * len(df)
