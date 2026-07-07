@@ -60,6 +60,15 @@ with ui.layout_column_wrap(width=1/2):
 
             m = L.Map(center=(center_lat, center_lon), zoom=10, layers=[gages_layer, ucol_layer, osm_layer], scroll_wheel_zoom=True)
 
+            # 1. Create a single, reusable HTML widget and Popup container
+            popup_html = widgets.HTML()
+            map_popup = L.Popup(
+                child=popup_html,
+                close_button=True, 
+                auto_close=True, 
+                close_on_escape_key=True
+            )
+
             def gage_click(event=None, feature=None, id=None, **kwargs):
                 properties = feature.get('properties', {})
                 name = properties['name']
@@ -67,92 +76,52 @@ with ui.layout_column_wrap(width=1/2):
                 
                 selected_gage.set({"gage": gage, "name": name})
                 
-                # -----------------------------------------------------------
-                # DYNAMIC WATERSHED & DIVERSIONS HANDLING
-                # -----------------------------------------------------------
-                # Clear out old watershed and diversions layers
+                # --- DYNAMIC WATERSHED & DIVERSIONS HANDLING ---
                 for layer in list(m.layers):
                     if layer.name in ["Active Watershed", "Diversions"]:
                         m.remove_layer(layer)
                 
-                # Filter the basins dataframe for the clicked gage ID
                 selected_basin_df = basins[basins['gage'] == gage]
                 
                 if not selected_basin_df.empty:
-                    # Construct a new GeoData layer for the polygon outline
                     watershed_layer = L.GeoData(
                         geo_dataframe=selected_basin_df,
-                        style={
-                            "color": "blue",         # Blue outline
-                            "weight": 2,
-                            "fillColor": "lightblue", # Very light blue fill
-                            "fillOpacity": 0.25,
-                            'interactive':False,
-                        },
-                        interactive=False,          # Allows users to still click items underneath it
+                        style={"color": "blue", "weight": 2, "fillColor": "lightblue", "fillOpacity": 0.25, 'interactive':False},
+                        interactive=False,
                         name="Active Watershed"
                     )
-                    # Add it to the map canvas dynamically
                     m.add_layer(watershed_layer)
 
-                    # Spatial filter: clip diversions to inside the active watershed
                     selected_dvrs = gpd.clip(dvrs, selected_basin_df)
-
                     if not selected_dvrs.empty:
-                        
-                        # 1. Map your colors directly into the GeoDataFrame as new columns
                         selected_dvrs['fillColor'] = selected_dvrs['siteUse'].map(CU_COLORS).fillna('#666666')
                         selected_dvrs['color'] = selected_dvrs['fillColor']
                         selected_dvrs['radius'] = 4
                         selected_dvrs['fillOpacity'] = 0.7
                         selected_dvrs['weight'] = 1
 
-                        print(selected_dvrs['fillColor'])
-
-                        # 2. Build the layer using a static configuration
                         diversions_layer = L.GeoData(
                             geo_dataframe=selected_dvrs,
                             point_style={"type": "circle"}, 
-                            
-                            # We pass a structural layout dict instead of a dynamic callback function
-                            style={
-                                "radius": 4,
-                                "fillOpacity": 0.2,
-                                "weight": 1,
-                                "color":"#666666"
-                                # ipyleaflet will automatically bind individual row colors 
-                                # if they exist as properties in the geo_dataframe features
-                            },
+                            style={"radius": 4, "fillOpacity": 0.2, "weight": 1, "color":"#666666"},
                             name="Diversions"
                         )
-                        
                         m.add_layer(diversions_layer)
                 # -----------------------------------------------------------
                 
+                # 2. Update the persistent popup instead of creating a new one
                 coords = feature['geometry']['coordinates']
-                lat_lon = [coords[1], coords[0]]
                 
-                new_popup = L.Popup(
-                    location=lat_lon,
-                    child=widgets.HTML(value=f"<b>{name}<br>USGS-{gage}</b><br>"),
-                    close_button=True, auto_close=True, close_on_escape_key=True
-                )
-                m.add(new_popup)
+                popup_html.value = f"<b>{name}<br>USGS-{gage}</b><br>"
+                map_popup.location = [coords[1], coords[0]]
+                
+                # If the popup isn't already on the map, add it
+                if map_popup not in m.layers:
+                    m.add(map_popup)
 
             gages_layer.on_click(gage_click)
             control = L.LayersControl(position="topright")
             m.add_control(control)
-
-            # # Create Legend
-            # legend = L.LegendControl(
-            #     {
-            #         "Streamgage": "#0000ff",  # Gage color
-            #         **{name: color for name, color in CU_COLORS.items()},
-            #     },
-            #     name="",
-            #     position="bottomright",
-            # )
-            # m.add_control(legend)
             
             m.fit_bounds(bounds)
             return m
@@ -183,8 +152,9 @@ with ui.layout_column_wrap(width=1/2):
                     filename=lambda: f"USGS-{selected_gage.get()['gage'] if selected_gage.get() else 'data'}_extracted.csv"
                 )
                 def download_data():
-                    df_filtered = get_filtered_data()
-                    if df_filtered is not None:
+                    results = get_filtered_data()
+                    if results is not None:
+                        df_filtered, _ = results
                         return df_filtered.to_csv(index=False)
 
         @reactive.calc
@@ -209,7 +179,7 @@ with ui.layout_column_wrap(width=1/2):
             last_valid = df[Q_col].last_valid_index()
 
             if first_valid is not None and last_valid is not None:
-                df = df.loc[first_valid:last_valid]
+                df = df.loc[first_valid:last_valid].copy()
             else:
                 df = df.iloc[0:0]
             
@@ -245,6 +215,7 @@ with ui.layout_column_wrap(width=1/2):
                 return fig
 
             df, valid_range = get_filtered_data()
+            df = df.copy()
             
             if df.empty:
                 fig = go.Figure()
