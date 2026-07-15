@@ -35,114 +35,6 @@ appcwd = os.path.join(cwd, r'shiny-app\ucol_natural')
 
 
 # Now we need to select basins for training, testing, and implementation
-from scipy.optimize import milp, LinearConstraint, Bounds
-
-def select_max_water_years_global(basins_gdf, flow_df, gage_col='gage'):
-    """
-    Selects a non-nested subset of basins within the Upper Colorado River Basin
-    using True Global Optimization (ILP) to maximize total basin-water-years.
-    """
-    num_basins = len(basins_gdf)
-    # -------------------------------------------------------------------------
-    # 2. Calculate Water Year Completeness Weights
-    # -------------------------------------------------------------------------
-    water_years = flow_df.index.to_series().apply(lambda d: d.year + 1 if d.month >= 10 else d.year)
-    
-    good_years_dict = {}
-    for col in flow_df.columns:
-        if col in basins_gdf[gage_col].values:
-            yearly_complete = flow_df[col].groupby(water_years).apply(lambda x: x.notna().mean() >= 0.70) # Using your 0.80 threshold
-            good_years_dict[col] = yearly_complete.sum()
-
-    basins_gdf['good_wy'] = basins_gdf[gage_col].map(good_years_dict).fillna(0)
-
-    # -------------------------------------------------------------------------
-    # 3. Build Conflict Matrix (Nesting Constraints)
-    # -------------------------------------------------------------------------
-    print("Analyzing spatial relationships to build global constraints...")
-    
-    # We need to construct an inequality matrix A where each row represents a conflict.
-    # If Basin i and Basin j intersect, we append a constraint: x_i + x_j <= 1
-    # This prevents the solver from selecting both.
-    constraints_list = []
-    
-    # Define a minimum overlap area threshold in square meters.
-    # For a 100m misalignment along a typical boundary, we can look at the total overlap area.
-    # Alternatively, you can check if the overlap constitutes more than e.g., 1% of the smaller basin.
-    AREA_CUSHION_M2 = 100 * 100  # 10,000 m² (equivalent to a 100m x 100m grid cell)
-
-    basins_list = basins_gdf.to_dict('records')
-    for i in range(num_basins):
-        poly_i = basins_list[i]['geometry']
-        
-        for j in range(i + 1, num_basins):
-            poly_j = basins_list[j]['geometry']
-            
-            # First do a fast check: do they even touch/overlap?
-            if poly_i.intersects(poly_j):
-                # Calculate the exact geometric intersection polygon
-                intersection_poly = poly_i.intersection(poly_j)
-                
-                # Only flag as a conflict if the intersection area exceeds our cushion
-                # (Note: Your GeoDataFrame must be in a metric projected CRS like UTM or Albers)
-                if intersection_poly.area > AREA_CUSHION_M2:
-                    
-                    # Optional secondary check: Ensure it's not just a long, thin sliver 
-                    # by checking if it represents more than 1% of either basin's total area.
-                    min_basin_area = min(poly_i.area, poly_j.area)
-                    if intersection_poly.area / min_basin_area > 0.01:
-                        
-                        row = np.zeros(num_basins)
-                        row[i] = 1
-                        row[j] = 1
-                        constraints_list.append(row)
-
-    # -------------------------------------------------------------------------
-    # 4. Set Up and Solve the Integer Linear Program (ILP)
-    # -------------------------------------------------------------------------
-    print("Solving Global Optimization Problem...")
-    
-    # The solver *minimizes* c^T * x. To maximize, we invert the weights (negative values)
-    c = -basins_gdf['good_wy'].values
-    
-    # Define bounds: each basin variable x must be 0 or 1 (Binary integer)
-    bounds = Bounds(0, 1)
-    integrality = np.ones(num_basins) # 1 means integer variable
-    
-    if len(constraints_list) > 0:
-        A = np.array(constraints_list)
-        # For every conflict row, the sum of selections must be less than or equal to 1
-        ub = np.ones(A.shape[0])
-        lb = np.zeros(A.shape[0]) # can be 0 or 1
-        constraints = LinearConstraint(A, lb, ub)
-    else:
-        constraints = []
-
-    # Run the Mixed-Integer Linear Programming solver
-    res = milp(c=c, bounds=bounds, constraints=constraints, integrality=integrality)
-    
-    if not res.success:
-        raise RuntimeError(f"Optimization failed: {res.message}")
-        
-    # Extracted selections (rounded cleanly to 0 or 1)
-    selected_indices = np.where(np.round(res.x) == 1)[0]
-    selected_gages = basins_gdf.iloc[selected_indices][gage_col].tolist()
-
-    # -------------------------------------------------------------------------
-    # 5. Map results back to the original DataFrame
-    # -------------------------------------------------------------------------
-    basins_gdf['model_category'] = 'no-model (nested or excluded)'
-    basins_gdf.loc[basins_gdf[gage_col].isin(selected_gages), 'model_category'] = 'train_test'
-    basins_gdf['good_water_years'] = basins_gdf[gage_col].map(good_years_dict).fillna(0)
-    
-    total_selected_years = basins_gdf[basins_gdf['model_category'] == 'train_test']['good_water_years'].sum()
-    
-    print(f"\nOptimization Complete!")
-    print(f"Selected {len(selected_gages)} non-nested basins.")
-    print(f"True Maximized High-Quality Basin-Water-Years: {int(total_selected_years)} years.")
-    
-    return basins_gdf
-
 
 def diagnose_gage_quality(df, completion_threshold=0.90):
     """
@@ -492,6 +384,7 @@ def make_tiles(gdf, n_tiles_x=3, n_tiles_y=3):
 
 
 def fix_gage_id(id_val):
+    id_val = int(round(id_val))
     id_str = str(id_val).strip()
     # Only pad if it is a 7-digit numeric string
     if len(id_str) == 7 and id_str.isdigit():
@@ -1175,15 +1068,166 @@ for idx, row in basins.iterrows():
 ################################################
 # MAYBE USE THIS TO SELECT TRAIN AND TEST
 basins.geometry = basins.geometry.to_crs(9822)
-results_df = select_max_water_years_global(basins, flow)
-results_df.to_file(os.path.join(ncwd, r'data/shapefiles/basin_selection_results.gpkg'))
-results_df.to_file(os.path.join(ncwd, r'data/shapefiles/basin_selection_results.shp'))
+basins['area_albers'] = basins.area
 
-model_basins = results_df[results_df.model_category.str.contains('train_test')]
-model_basins.explore()
+import networkx as nx
+import pulp
+
+def select_optimal_watersheds(gdf, n_required, id_col="gage_id", area_col="area"):
+    """Selects a non-overlapping subset of watersheds that maximizes total area
+
+    and ensures at least `n_required` watersheds are picked.
+    """
+    # 1. Build an overlap/intersection matrix (or containment matrix)
+    # To be safe, we check if they overlap spatially by more than a tiny threshold
+    # (handles slight geometric slivers or perfect containment)
+    print("Analyzing spatial relationships...")
+
+    # Spatial join to find all pairs that intersect
+    sjoin_df = gpd.sjoin(gdf, gdf, how="inner", predicate="intersects")
+
+    # Filter out self-intersection
+    overlap_pairs = sjoin_df[
+        sjoin_df[f"{id_col}_left"] != sjoin_df[f"{id_col}_right"]
+    ]
+
+    # Create a lookup for areas
+    area_dict = dict(zip(gdf[id_col], gdf[area_col]))
+    watershed_ids = list(gdf[id_col].unique())
+
+    # 2. Define the Optimization Problem
+    prob = pulp.LpProblem("Maximize_Watershed_Area", pulp.LpMaximize)
+
+    # Decision variables: 1 if we select the watershed, 0 otherwise
+    select_vars = pulp.LpVariable.dicts(
+        "Select", watershed_ids, cat="Binary"
+    )
+
+    # Objective Function: Maximize total area
+    prob += (
+        pulp.lpSum([select_vars[w_id] * area_dict[w_id] for w_id in watershed_ids]),
+        "Total_Area",
+    )
+
+    # Constraint 1: Minimum number of watersheds required
+    prob += (
+        pulp.lpSum([select_vars[w_id] for w_id in watershed_ids]) >= n_required,
+        "Min_Count",
+    )
+
+    # Constraint 2: No nested/overlapping watersheds
+    # If two watersheds overlap, we can choose at most one of them
+    seen_pairs = set()
+    for _, row in overlap_pairs.iterrows():
+        id1 = row[f"{id_col}_left"]
+        id2 = row[f"{id_col}_right"]
+
+        # Keep tracking unique pairs to avoid redundant constraints
+        pair = tuple(sorted([id1, id2]))
+        if pair not in seen_pairs:
+            prob += select_vars[id1] + select_vars[id2] <= 1
+            seen_pairs.add(pair)
+
+    # 3. Solve the problem
+    print("Solving optimization...")
+    # Using default CBC solver (comes packaged with PuLP)
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=False))
+
+    if pulp.LpStatus[status] != "Optimal":
+        raise ValueError(
+            f"Could not find an optimal solution. Status: {pulp.LpStatus[status]}. "
+            "Try lowering your required number of watersheds (n)."
+        )
+
+    # 4. Filter the original GeoDataFrame
+    selected_ids = [
+        w_id for w_id in watershed_ids if select_vars[w_id].varValue == 1
+    ]
+    final_gdf = gdf[gdf[id_col].isin(selected_ids)].copy()
+
+    print(
+        f"Successfully selected {len(final_gdf)} watersheds covering "
+        f"{final_gdf[area_col].sum():,.2f} square units."
+    )
+
+    return final_gdf
+
+selection = select_optimal_watersheds(basins, 75, id_col='gage', area_col='area_albers')
+selection.explore()
+
+############# REMOVE BASINS WITH TOO MUCH DAM STORAGE OR DIVERSION ##############
+# get attributes
+attrs_path = os.path.join(appcwd, r'attributes\all_UCOL_attributes.csv')
+attrs = pd.read_csv(attrs_path)
+attrs['gage'] = attrs['gage'].apply(fix_gage_id)
+attrs.index = attrs.gage
+
+# add names to attrs
+basins.index = basins.gage
+attrs['name'] = basins.name
+name_col = attrs.pop("name")
+attrs.insert(0, "name", name_col)
+attrs.to_csv(attrs_path)
+
+# basins
+removed = {}
+for gage in basins.gage:
+    csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow7\{gage}.csv')
+    df = pd.read_csv(csv)
+    attrs_dict = attrs[attrs.gage==gage].to_dict()
+
+    # threshold for regulation capacity
+    DAMS = 0
+    if attrs_dict['dor_pc_pva'][gage] > DAMS:
+        removed[gage] = f'Dam Storage Over {DAMS}'
+        continue
+
+    # check for NAs
+    NAs = 0.05
+    NA_ratio = df['Q_cfs'].isna().sum() / len(df)
+    if NA_ratio > 0.05:
+        removed[gage] = f'NA Ratio over {NAs}'
+        continue
+
+    # check length
+    days = 365*2
+    if len(df) < days:
+        removed[gage] = f'Less than {days} days'
+        continue
+
+    # see if it's regulated
+    CU_vars = ['irrigation' , 'municipal', 'intrabasin', 'interbasin', 'industrial']
+    CU = 0
+    for var in CU_vars:
+        try: # try because the columns don't exist sometimes
+            CU += df[f'{var}_cfs'].sum()
+        except:
+            continue
+
+    CU = CU * -1
+    try:
+        CU += df['transbasin_cfs'].sum()
+    except:
+        pass
+
+    Q = df['Q_cfs'].sum()
+
+    divert_ratio = 0.05
+    divert = CU/Q
+
+    if divert > divert_ratio:
+        removed[gage] = f'Consumptive Use + transbasin / Q over {divert_ratio}'
+        continue
+
+    removed[gage] = 'Candidate'
+
+
+
+
+
 
 ############# REMOVE NESTED BASINS ##############
-headwaters = remove_nested_basins(model_basins)
+headwaters = remove_nested_basins(basins)
 headwaters.explore()
 headwaters_path = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\shapefiles\UCOL_headwaters_sheds.gpkg'
 headwaters.to_file(headwaters_path, driver='GPKG')
