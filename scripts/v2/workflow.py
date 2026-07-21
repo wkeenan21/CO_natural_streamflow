@@ -384,14 +384,26 @@ def make_tiles(gdf, n_tiles_x=3, n_tiles_y=3):
 
 
 def fix_gage_id(id_val):
-    id_val = int(round(id_val))
-    id_str = str(id_val).strip()
-    # Only pad if it is a 7-digit numeric string
-    if len(id_str) == 7 and id_str.isdigit():
-        return id_str.zfill(8)
+    # 1. Convert to string base representation without precision loss
+    if isinstance(id_val, float):
+        id_str = str(int(round(id_val)))
+    elif isinstance(id_val, str) and '.' in id_val:
+        try:
+            id_str = str(int(round(float(id_val))))
+        except ValueError:
+            id_str = id_val.strip()
+    else:
+        id_str = str(id_val).strip()
 
+    # 2. Clean prefixes
     if 'USGS-' in id_str:
         id_str = id_str.replace('USGS-', '')
+
+    # 3. Pad 7-digit IDs with a leading zero
+    if len(id_str) == 7 and id_str.isdigit():
+        return id_str.zfill(8)
+    elif id_str == '93710009':
+        return id_str.zfill(9)
 
     return id_str
 
@@ -671,6 +683,9 @@ print(len(basins))
 basins = pd.concat([basins, man_delin])
 print(len(basins))
 
+# remove holes from geometry:
+
+
 # Enforce that they are the same
 basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
 gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
@@ -901,6 +916,8 @@ for gage in basins.gage:
         continue
 
 #### GRAB CLIMATE FORCING ####
+basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
+gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 basins = gpd.read_parquet(basins_path)
 gages = gpd.read_parquet(gages_path)
 
@@ -958,6 +975,7 @@ snodas_lookup = snodas_lookup.sort_values(by='date')
 for idx, row in basins.iterrows():
 
     gage = str(row['gage'])
+
     outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
     outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow7\{gage}.csv'
 
@@ -983,14 +1001,24 @@ for idx, row in basins.iterrows():
 
         # 1. Fetch gridded
         try:
+            print(f"area: {single_gdf['area_m2'].iloc[0]/10000000}")
             ds = gridmet.get_bygeom(
                 geometry=single_gdf.geometry.iloc[0],
                 dates=date_range,
                 crs=single_gdf.crs,
                 variables=variables,
             )
-        except:
-            print(f'{gage} failed gridmet download')
+        except Exception as e:
+            print(f'{gage} {e}')
+            if not 'MemoryError' in str(e):
+                print(f"getting by coords {gage}")
+                ds = gridmet.get_bycoords(
+                    coords=[single_gdf.geometry.iloc[0].centroid.x, single_gdf.geometry.iloc[0].centroid.y],
+                    dates=date_range,
+                    crs=single_gdf.crs,
+                    variables=variables,
+                    to_xarray=True
+                )
             continue
         # lets look at one
         # da_variable = ds["pr"]
@@ -1156,9 +1184,15 @@ selection = select_optimal_watersheds(basins, 75, id_col='gage', area_col='area_
 selection.explore()
 
 ############# REMOVE BASINS WITH TOO MUCH DAM STORAGE OR DIVERSION ##############
+# SKIP STEPS BY READING HERE
+basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
+gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
+basins = gpd.read_parquet(basins_path)
+gages = gpd.read_parquet(gages_path)
+
 # get attributes
 attrs_path = os.path.join(appcwd, r'attributes\all_UCOL_attributes.csv')
-attrs = pd.read_csv(attrs_path)
+attrs = pd.read_csv(attrs_path, dtype={'gage': np.float64})
 attrs['gage'] = attrs['gage'].apply(fix_gage_id)
 attrs.index = attrs.gage
 
@@ -1167,13 +1201,17 @@ basins.index = basins.gage
 attrs['name'] = basins.name
 name_col = attrs.pop("name")
 attrs.insert(0, "name", name_col)
-attrs.to_csv(attrs_path)
+attrs.to_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
 
-# basins
+# check for data completeness
 removed = {}
 for gage in basins.gage:
     csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow7\{gage}.csv')
-    df = pd.read_csv(csv)
+    try:
+        df = pd.read_csv(csv)
+    except:
+        removed[gage] = 'No timeseries'
+        continue
     attrs_dict = attrs[attrs.gage==gage].to_dict()
 
     # threshold for regulation capacity
