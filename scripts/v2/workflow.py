@@ -725,12 +725,28 @@ if not skip:
     basins[basins.gage==ucol_gage].explore()
     # DIVERSIONS
     # COLUMN = siteID
+
+skip2 = False
+if not skip2:
     ###################
     # SKIP STEPS BY READING HERE
     basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
     gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
     basins = gpd.read_parquet(basins_path)
     gages = gpd.read_parquet(gages_path)
+    big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
+    flow = pd.read_csv(big_flow_path).set_index('date')
+    flow.index = pd.to_datetime(flow.index)
+        # fix timeseries index
+    flow.index = flow.index.normalize().tz_localize(None)
+    # rename columns
+    rename_dict = {}
+    for usgsgage in flow.columns:
+        gage = fix_gage_id(usgsgage)
+        rename_dict[usgsgage] = gage
+    flow = flow.rename(columns=rename_dict)
+    name_dict = gages.set_index('gage')['name'].to_dict()
+    date_range = ("1979-10-01", "2025-09-30")
     #####################
 
     dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
@@ -762,7 +778,7 @@ if not skip:
     dvrsFlow = pd.read_csv(os.path.join(ncwd, "data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
     dvrsFlow = dvrsFlow.rename(columns={'datetime':'date'})
     dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
-    dvrsFlow = pd.concat([dvrsFlow, dvrsFlow])
+    #dvrsFlow = pd.concat([dvrsFlow, dvrsFlow])
 
     # Ensure date columns are datetime objects for proper merging
     dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
@@ -791,17 +807,28 @@ if not skip:
     for gage in basins.gage:
 
         out_path_small = os.path.join(appDir, f"{gage}.csv")
+        out_path = os.path.join(wdvrsDir, f"{gage}.csv")
         
         # Check if the file exists first
         if os.path.exists(out_path_small):
+            df = pd.read_csv(out_path_small, parse_dates=['date'], index_col='date')
+            df_cleaned = df[~df.index.duplicated(keep='first')]
+            df_cleaned = df_cleaned.asfreq('D')
+            df_cleaned.to_csv(out_path_small, index_label='date')
+
+        if os.path.exists(out_path):
+            df = pd.read_csv(out_path, parse_dates=['date'], index_col='date')
+            df_cleaned = df[~df.index.duplicated(keep='first')]
+            df_cleaned = df_cleaned.asfreq('D')
+            df_cleaned.to_csv(out_path, index_label='date')
+
             # Get the last modification time of the file
-            file_mod_time = os.path.getmtime(out_path_small)
+            #file_mod_time = os.path.getmtime(out_path_small)
             
             # If the file was modified less than 24 hours ago, skip it
-            if (current_time - file_mod_time) < seconds_in_1_hours:
-                print(f"Skipping {gage}.csv - updated within the last 24 hours.")
-                continue
-
+            # if (current_time - file_mod_time) < seconds_in_1_hours:
+            #     print(f"Skipping {gage}.csv - updated within the last 24 hours.")
+            #     continue
 
         df = flow[[gage]]
         df = df.rename(columns={gage:'Q_cms'})
@@ -913,8 +940,8 @@ if not skip:
             # If no diversions found, we still save the original flow (or skip)
             combined_df = df
             
+        combined_df = combined_df.asfreq('D')
         # 4. Save the new CSV
-        out_path = os.path.join(wdvrsDir, f"{gage}.csv")
         combined_df.to_csv(out_path, index_label='date')
 
         # make a smaller df without all the diversions
@@ -929,15 +956,6 @@ if not skip:
         small_df.to_csv(out_path_small, index_label='date')
 
         print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
-
-    for gage in basins.gage:
-        out_path_small = os.path.join(appDir, f"{gage}.csv")
-        df = pd.read_csv(out_path_small, parse_dates=['date'])
-        try:
-            if any(df['Q_NAT_cfs'] < 0):
-                print(gage)
-        except:
-            continue
 
 #### GRAB CLIMATE FORCING ####
 basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
@@ -1130,10 +1148,52 @@ for gage in basins.gage:
         print(f'No gridmet data available for {gage}, skipping outpath2 creation')
         nodata.append((gage, name))
 
+results = []
 for gage in basins.gage:
+    rd = {}
+    rd['gage'] = gage
     outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
     outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow7\{gage}.csv'
+    if os.path.exists(outpath):
+        rd['gr'] = True
+    else:
+        rd['gr'] = False
+    if os.path.exists(outpath2):
+        rd['fl'] = True
+    else:
+        rd['fl'] = False
 
+    results.append(rd)
+
+    if os.path.exists(outpath) and not os.path.exists(outpath2):
+        print(f'merging flow for {gage}...')
+        try:
+            gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
+            if 'spatial_ref_x' in gr_df.columns and 'spatial_ref_y' in gr_df.columns:
+                gr_df = gr_df.drop(columns=['spatial_ref_x', 'spatial_ref_y'])
+
+            flow_path = os.path.join(appDir, f"{gage}.csv")
+            flow_df = pd.read_csv(flow_path, parse_dates=['date'], index_col='date')
+            flow_df = flow_df[~flow_df.index.duplicated(keep='first')]
+
+            Q_col = 'Q_cfs'
+            first_valid = flow_df[Q_col].first_valid_index()
+            last_valid = flow_df[Q_col].last_valid_index()
+
+            flow_df = flow_df.loc[first_valid:last_valid]
+            flow_df = flow_df.interpolate(method='linear', limit=7)
+            #diagnose_gage_quality(flow_df[[Q_col]])
+
+            gr_df = pd.merge(left=gr_df, right=flow_df, how='left', left_index=True, right_index=True)
+            gr_df = gr_df.asfreq('D')
+
+            gr_df.to_csv(outpath2, index_label='date')
+            print(f'Successfully generated {outpath2}')
+        except Exception as e:
+            print(f"Error merging flow data for {gage}: {e}")
+            nodata.append((gage, name))
+
+datacheck = pd.DataFrame().from_dict(results)
     
 ################################################
 # MAYBE USE THIS TO SELECT TRAIN AND TEST
@@ -1246,35 +1306,39 @@ attrs.insert(0, "name", name_col)
 attrs.to_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
 
 # check for data completeness
-removed = {}
+results = []
+Q_col = 'Q_cfs'
 for gage in basins.gage:
+    rd = {'gage':gage}
+    # gage = '09132050'
     csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow7\{gage}.csv')
     try:
-        df = pd.read_csv(csv)
+        df = pd.read_csv(csv, index_col='date', parse_dates=['date'])
     except:
-        removed[gage] = 'No timeseries'
-        continue
+        print('No timeseries', gage)
+
+    first_valid = df[Q_col].first_valid_index()
+    last_valid = df[Q_col].last_valid_index()
+    df = df.loc[first_valid:last_valid]
+
     attrs_dict = attrs[attrs.gage==gage].to_dict()
 
     # threshold for regulation capacity
-    DAMS = 0.1
-    if attrs_dict['dor_pc_pva'][gage] > DAMS:
-        removed[gage] = f'Dam Storage Over {DAMS}'
-        continue
-
+    DAMS = 10 * 10 # units are percent x 10
+    
+    rd['dor_pc_pva'] = attrs_dict['dor_pc_pva'][gage]
     # check for NAs
     NAs = 0.1
-    NA_ratio = df['Q_cfs'].isna().sum() / len(df)
-    if NA_ratio > NAs:
-        removed[gage] = f'NA Ratio over {NAs}'
-        continue
+    NA_ratio = df[Q_col].isna().sum() / len(df)
+    rd['NA_ratio'] = NA_ratio
 
     # check length
     days = 365*2
-    if len(df) < days:
-        removed[gage] = f'Less than {days} days'
-        continue
+    period = len(df)
 
+    rd['firstday'] = first_valid
+    rd['lastday'] = last_valid
+    rd['period'] = period
     # see if it's regulated
     CU_vars = ['irrigation' , 'municipal', 'intrabasin', 'interbasin', 'industrial']
     CU = 0
@@ -1282,7 +1346,7 @@ for gage in basins.gage:
         try: # try because the columns don't exist sometimes
             CU += df[f'{var}_cfs'].sum()
         except:
-            continue
+            pass
 
     CU = CU * -1
     try:
@@ -1295,15 +1359,13 @@ for gage in basins.gage:
     divert_ratio = 0.1
     divert = CU/Q
 
-    if divert > divert_ratio:
-        removed[gage] = f'Consumptive Use + transbasin / Q over {divert_ratio}'
-        continue
+    rd['diversion_frac'] = divert
 
-    removed[gage] = 'Candidate'
+    results.append(rd)
 
+rdf = pd.DataFrame().from_dict(results)
 from collections import Counter
-counts = Counter(removed.values())
-print(counts)
+
 
 ############# REMOVE NESTED BASINS ##############
 headwaters = remove_nested_basins(basins)
