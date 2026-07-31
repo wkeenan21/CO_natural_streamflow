@@ -32,7 +32,7 @@ import pyarrow
 cwd = os.getcwd()
 ncwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow'
 appcwd = os.path.join(cwd, r'shiny-app\ucol_natural')
-
+appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
 
 # Now we need to select basins for training, testing, and implementation
 
@@ -1148,142 +1148,40 @@ for gage in basins.gage:
         print(f'No gridmet data available for {gage}, skipping outpath2 creation')
         nodata.append((gage, name))
 
-results = []
-for gage in basins.gage:
-    rd = {}
-    rd['gage'] = gage
-    outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
-    outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow7\{gage}.csv'
-    if os.path.exists(outpath):
-        rd['gr'] = True
-    else:
-        rd['gr'] = False
-    if os.path.exists(outpath2):
-        rd['fl'] = True
-    else:
-        rd['fl'] = False
+#############
+# Merge some with 0 interpolation
+#############
 
-    results.append(rd)
+for gage in basins.index.to_list():
+
+    outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
+    outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow0\{gage}.csv'
 
     if os.path.exists(outpath) and not os.path.exists(outpath2):
         print(f'merging flow for {gage}...')
-        try:
-            gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
-            if 'spatial_ref_x' in gr_df.columns and 'spatial_ref_y' in gr_df.columns:
-                gr_df = gr_df.drop(columns=['spatial_ref_x', 'spatial_ref_y'])
 
-            flow_path = os.path.join(appDir, f"{gage}.csv")
-            flow_df = pd.read_csv(flow_path, parse_dates=['date'], index_col='date')
-            flow_df = flow_df[~flow_df.index.duplicated(keep='first')]
+        gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
+        if 'spatial_ref_x' in gr_df.columns and 'spatial_ref_y' in gr_df.columns:
+            gr_df = gr_df.drop(columns=['spatial_ref_x', 'spatial_ref_y'])
 
-            Q_col = 'Q_cfs'
-            first_valid = flow_df[Q_col].first_valid_index()
-            last_valid = flow_df[Q_col].last_valid_index()
+        flow_path = os.path.join(appDir, f"{gage}.csv")
+        flow_df = pd.read_csv(flow_path, parse_dates=['date'], index_col='date')
+        flow_df = flow_df[~flow_df.index.duplicated(keep='first')]
 
-            flow_df = flow_df.loc[first_valid:last_valid]
-            flow_df = flow_df.interpolate(method='linear', limit=7)
-            #diagnose_gage_quality(flow_df[[Q_col]])
+        Q_col = 'Q_cfs'
+        first_valid = flow_df[Q_col].first_valid_index()
+        last_valid = flow_df[Q_col].last_valid_index()
 
-            gr_df = pd.merge(left=gr_df, right=flow_df, how='left', left_index=True, right_index=True)
-            gr_df = gr_df.asfreq('D')
+        flow_df = flow_df.loc[first_valid:last_valid]
+        #flow_df = flow_df.interpolate(method='linear', limit=7)
+        #diagnose_gage_quality(flow_df[[Q_col]])
 
-            gr_df.to_csv(outpath2, index_label='date')
-            print(f'Successfully generated {outpath2}')
-        except Exception as e:
-            print(f"Error merging flow data for {gage}: {e}")
-            nodata.append((gage, name))
+        gr_df = pd.merge(left=gr_df, right=flow_df, how='left', left_index=True, right_index=True)
+        gr_df = gr_df.asfreq('D')
 
-datacheck = pd.DataFrame().from_dict(results)
-    
-################################################
-# MAYBE USE THIS TO SELECT TRAIN AND TEST
-basins.geometry = basins.geometry.to_crs(9822)
-basins['area_albers'] = basins.area
+        gr_df.to_csv(outpath2, index_label='date')
+        print(f'Successfully generated {outpath2}')
 
-import networkx as nx
-import pulp
-
-def select_optimal_watersheds(gdf, n_required, id_col="gage_id", area_col="area"):
-    """Selects a non-overlapping subset of watersheds that maximizes total area
-
-    and ensures at least `n_required` watersheds are picked.
-    """
-    # 1. Build an overlap/intersection matrix (or containment matrix)
-    # To be safe, we check if they overlap spatially by more than a tiny threshold
-    # (handles slight geometric slivers or perfect containment)
-    print("Analyzing spatial relationships...")
-
-    # Spatial join to find all pairs that intersect
-    sjoin_df = gpd.sjoin(gdf, gdf, how="inner", predicate="intersects")
-
-    # Filter out self-intersection
-    overlap_pairs = sjoin_df[
-        sjoin_df[f"{id_col}_left"] != sjoin_df[f"{id_col}_right"]
-    ]
-
-    # Create a lookup for areas
-    area_dict = dict(zip(gdf[id_col], gdf[area_col]))
-    watershed_ids = list(gdf[id_col].unique())
-
-    # 2. Define the Optimization Problem
-    prob = pulp.LpProblem("Maximize_Watershed_Area", pulp.LpMaximize)
-
-    # Decision variables: 1 if we select the watershed, 0 otherwise
-    select_vars = pulp.LpVariable.dicts(
-        "Select", watershed_ids, cat="Binary"
-    )
-
-    # Objective Function: Maximize total area
-    prob += (
-        pulp.lpSum([select_vars[w_id] * area_dict[w_id] for w_id in watershed_ids]),
-        "Total_Area",
-    )
-
-    # Constraint 1: Minimum number of watersheds required
-    prob += (
-        pulp.lpSum([select_vars[w_id] for w_id in watershed_ids]) >= n_required,
-        "Min_Count",
-    )
-
-    # Constraint 2: No nested/overlapping watersheds
-    # If two watersheds overlap, we can choose at most one of them
-    seen_pairs = set()
-    for _, row in overlap_pairs.iterrows():
-        id1 = row[f"{id_col}_left"]
-        id2 = row[f"{id_col}_right"]
-
-        # Keep tracking unique pairs to avoid redundant constraints
-        pair = tuple(sorted([id1, id2]))
-        if pair not in seen_pairs:
-            prob += select_vars[id1] + select_vars[id2] <= 1
-            seen_pairs.add(pair)
-
-    # 3. Solve the problem
-    print("Solving optimization...")
-    # Using default CBC solver (comes packaged with PuLP)
-    status = prob.solve(pulp.PULP_CBC_CMD(msg=False))
-
-    if pulp.LpStatus[status] != "Optimal":
-        raise ValueError(
-            f"Could not find an optimal solution. Status: {pulp.LpStatus[status]}. "
-            "Try lowering your required number of watersheds (n)."
-        )
-
-    # 4. Filter the original GeoDataFrame
-    selected_ids = [
-        w_id for w_id in watershed_ids if select_vars[w_id].varValue == 1
-    ]
-    final_gdf = gdf[gdf[id_col].isin(selected_ids)].copy()
-
-    print(
-        f"Successfully selected {len(final_gdf)} watersheds covering "
-        f"{final_gdf[area_col].sum():,.2f} square units."
-    )
-
-    return final_gdf
-
-selection = select_optimal_watersheds(basins, 75, id_col='gage', area_col='area_albers')
-selection.explore()
 
 ############# REMOVE BASINS WITH TOO MUCH DAM STORAGE OR DIVERSION ##############
 # SKIP STEPS BY READING HERE
@@ -1296,10 +1194,10 @@ gages = gpd.read_parquet(gages_path)
 attrs_path = os.path.join(appcwd, r'attributes\all_UCOL_attributes.csv')
 attrs = pd.read_csv(attrs_path, dtype={'gage': np.float64})
 attrs['gage'] = attrs['gage'].apply(fix_gage_id)
-attrs.index = attrs.gage
+attrs = attrs.set_index('gage')
 
 # add names to attrs
-basins.index = basins.gage
+basins = basins.set_index('gage')
 attrs['name'] = basins.name
 name_col = attrs.pop("name")
 attrs.insert(0, "name", name_col)
@@ -1308,25 +1206,32 @@ attrs.to_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet')
 # check for data completeness
 results = []
 Q_col = 'Q_cfs'
-for gage in basins.gage:
+for gage in basins.index.to_list():
     rd = {'gage':gage}
-    # gage = '09132050'
-    csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow7\{gage}.csv')
+
+    # access the csv
+    csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow0\{gage}.csv')
     try:
         df = pd.read_csv(csv, index_col='date', parse_dates=['date'])
+        rd['data'] = True
     except:
         print('No timeseries', gage)
-
+        rd['data'] = False
+        results.append(rd)
+        continue
+    
+    # valid dates
     first_valid = df[Q_col].first_valid_index()
     last_valid = df[Q_col].last_valid_index()
+
+    # limit to valid dates
     df = df.loc[first_valid:last_valid]
 
-    attrs_dict = attrs[attrs.gage==gage].to_dict()
+    # calculate mean vars
+    variables = [Q_col, 'pr_sum', 'swe_sum', 'pet_sum', 'tmmx_mean', 'tmmn_mean']
+    for var in variables:
+        rd[f'{var}_mean'] = df[var].mean()
 
-    # threshold for regulation capacity
-    DAMS = 10 * 10 # units are percent x 10
-    
-    rd['dor_pc_pva'] = attrs_dict['dor_pc_pva'][gage]
     # check for NAs
     NAs = 0.1
     NA_ratio = df[Q_col].isna().sum() / len(df)
@@ -1339,32 +1244,54 @@ for gage in basins.gage:
     rd['firstday'] = first_valid
     rd['lastday'] = last_valid
     rd['period'] = period
-    # see if it's regulated
+
+    # CONSUMPTIVE USE
     CU_vars = ['irrigation' , 'municipal', 'intrabasin', 'interbasin', 'industrial']
     CU = 0
     for var in CU_vars:
         try: # try because the columns don't exist sometimes
             CU += df[f'{var}_cfs'].sum()
-        except:
+        except:  # noqa: E722, S110
             pass
-
     CU = CU * -1
     try:
         CU += df['transbasin_cfs'].sum()
-    except:
+    except:  # noqa: E722, S110
         pass
-
     Q = df['Q_cfs'].sum()
-
     divert_ratio = 0.1
     divert = CU/Q
-
     rd['diversion_frac'] = divert
 
     results.append(rd)
 
 rdf = pd.DataFrame().from_dict(results)
-from collections import Counter
+# marge with the geometry and area
+rdf = pd.merge(left=basins, right=rdf, on='gage')
+# merge with the attributes
+rdf = pd.merge(left=rdf, right=attrs, on=['gage', 'name'])
+
+############# BASIN SELECTION SCHEME ##################
+from sklearn.model_selection import train_test_split
+# which have enough data to be suitable for training and testing?
+NA_thresh = 0.15
+period_thresh = 365*1
+rdf2 = rdf[(rdf.NA_ratio < NA_thresh) & (rdf.period > period_thresh)]
+
+# We select the testing basins from the purely natural.
+strat = 'Q_cfs_mean'
+strat_col = f'strata_{strat}'
+bins=10
+
+rdf2[strat_col] = pd.cut(rdf2[strat], bins=10)
+natty = rdf2[(rdf2.diversion_frac==0) & (rdf2.dor_pc_pva == 0)]
+test_size = 10/len(natty) # I want 10 basins
+
+_, test_df = train_test_split(natty, test_size=test_size, stratify=natty[strat_col], random_state=42)
+test_df[['name', 'geometry']].explore()
+
+
+
 
 
 ############# REMOVE NESTED BASINS ##############
