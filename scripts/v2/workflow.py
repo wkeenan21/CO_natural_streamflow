@@ -1023,14 +1023,14 @@ appDir = os.path.join(appcwd, r'timeseries') # does not have each individual div
 nodata = []
 # Loop over each individual watershed
 for gage in basins.gage:
-
+    #gage = '09303400'
     outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
     outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow7\{gage}.csv'
 
     # 1. Skip if both files already exist
-    if os.path.exists(outpath) and os.path.exists(outpath2):
-        print(f'{gage} already done')
-        continue
+    # if os.path.exists(outpath) and os.path.exists(outpath2):
+    #     print(f'{gage} already done')
+    #     continue
 
     # 2. Check for SNODAS data
     try:
@@ -1047,7 +1047,7 @@ for gage in basins.gage:
     areakm2 = single_gdf['area_km2'].iloc[0]
 
     # 3. Generate gridMET file (outpath) if missing
-    if not os.path.exists(outpath):
+    if True: #not os.path.exists(outpath):
         print(f"downloading gridmet: {gage}...")
 
         if areakm2 < 10:
@@ -1083,6 +1083,7 @@ for gage in basins.gage:
                 df_sum = ds_sum.to_dataframe().reset_index()
                 gr_df = pd.merge(df_mean, df_sum, on='time')
                 gr_df = gr_df.rename(columns=rename_dict)
+                gr_df = gr_df.set_index('date', drop=True)
                 gr_df['swe'] = gage_swe_series
                 gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
                 gr_df.to_csv(outpath, index_label='date')
@@ -1106,6 +1107,8 @@ for gage in basins.gage:
                                 gr_df[f'{var}_sum'] = gr_df[f'{var}_sum'] * area_factor
 
                         gr_df['swe'] = gage_swe_series
+                        if gr_df['swe'].isna().sum() == len(gr_df):
+                            fuck
                         gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
                         gr_df.to_csv(outpath, index_label='date')
                     except Exception as fallback_e:
@@ -1115,49 +1118,15 @@ for gage in basins.gage:
         else:
             print(f"{gage} {name} too big, didn't try")
 
-    # 4. Generate flow merged file (outpath2) if outpath exists and outpath2 is missing
-    if os.path.exists(outpath) and not os.path.exists(outpath2):
-        print(f'merging flow for {gage}...')
-        try:
-            gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
-            if 'spatial_ref_x' in gr_df.columns and 'spatial_ref_y' in gr_df.columns:
-                gr_df = gr_df.drop(columns=['spatial_ref_x', 'spatial_ref_y'])
-
-            flow_path = os.path.join(appDir, f"{gage}.csv")
-            flow_df = pd.read_csv(flow_path, parse_dates=['date'], index_col='date')
-
-            Q_col = 'Q_cfs'
-            first_valid = flow_df[Q_col].first_valid_index()
-            last_valid = flow_df[Q_col].last_valid_index()
-
-            flow_df = flow_df.loc[first_valid:last_valid]
-            flow_df = flow_df.interpolate(method='linear', limit=7)
-            diagnose_gage_quality(flow_df[[Q_col]])
-
-            gr_df = pd.merge(left=gr_df, right=flow_df, how='left', left_index=True, right_index=True)
-            gr_df = gr_df.asfreq('D')
-
-            gr_df.to_csv(outpath2, index_label='date')
-            print(f'Successfully generated {outpath2}')
-        except Exception as e:
-            print(f"Error merging flow data for {gage}: {e}")
-            nodata.append((gage, name))
-
-    elif not os.path.exists(outpath):
-        # Only flag as missing if outpath truly could not be created/found
-        print(f'No gridmet data available for {gage}, skipping outpath2 creation')
-        nodata.append((gage, name))
-
 #############
-# Merge some with 0 interpolation
+# Merge with flow with 0 interpolation
 #############
-
-for gage in basins.index.to_list():
+for gage in train_eligible_rdf[train_eligible_rdf['diversion_frac'].isna()].gage:
 
     outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
     outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow0\{gage}.csv'
 
-    if os.path.exists(outpath) and not os.path.exists(outpath2):
+    if True: #os.path.exists(outpath) and not os.path.exists(outpath2):
         print(f'merging flow for {gage}...')
 
         gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
@@ -1171,8 +1140,12 @@ for gage in basins.index.to_list():
         Q_col = 'Q_cfs'
         first_valid = flow_df[Q_col].first_valid_index()
         last_valid = flow_df[Q_col].last_valid_index()
-
         flow_df = flow_df.loc[first_valid:last_valid]
+
+        if last_valid.year < 2003:
+            print(f'no data after {last_valid}, not generating {gage}')
+            continue
+
         #flow_df = flow_df.interpolate(method='linear', limit=7)
         #diagnose_gage_quality(flow_df[[Q_col]])
 
@@ -1208,7 +1181,6 @@ results = []
 Q_col = 'Q_cfs'
 for gage in basins.index.to_list():
     rd = {'gage':gage}
-
     # access the csv
     csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow0\{gage}.csv')
     try:
@@ -1232,6 +1204,8 @@ for gage in basins.index.to_list():
     for var in variables:
         rd[f'{var}_mean'] = df[var].mean()
 
+    if np.isnan(rd[f'{Q_col}_mean'])
+        rd['data'] = False
     # check for NAs
     NAs = 0.1
     NA_ratio = df[Q_col].isna().sum() / len(df)
@@ -1272,6 +1246,17 @@ rdf = pd.merge(left=basins, right=rdf, on='gage')
 rdf = pd.merge(left=rdf, right=attrs, on=['gage', 'name'])
 
 ############# BASIN SELECTION SCHEME ##################
+rdf = rdf[rdf.data]
+
+############ visualize basin size
+import seaborn as sns
+var='diversion_frac'
+sns.histplot(data=rdf, x=var, bins=20, log_scale=True, color='skyblue', edgecolor='black')
+plt.title(f'Histogram of {var}')
+plt.ylabel('Count')
+plt.grid(axis='y', alpha=0.5)
+plt.show()
+
 from sklearn.model_selection import train_test_split
 # which have enough data to be suitable for training and testing?
 NA_thresh = 0.15
@@ -1290,9 +1275,169 @@ test_size = 10/len(natty) # I want 10 basins
 _, test_df = train_test_split(natty, test_size=test_size, stratify=natty[strat_col], random_state=42)
 test_df[['name', 'geometry']].explore()
 
+################# Nested matrix ##################
+# 1. Ensure a projected CRS for accurate area calculations (reproject if geographic)
+if basins.crs is not None and basins.crs.is_geographic:
+    basins_proj = basins.to_crs(basins.estimate_utm_crs())
+else:
+    basins_proj = basins.copy()
 
+# Extract geometries, areas, and gage IDs
+gages = basins_proj.index.values
+geoms = basins_proj.geometry.values
+areas = basins_proj.geometry.area.values
+n = len(basins_proj)
 
+# 2. Set an overlap threshold (e.g., 85% of the smaller geometry's area)
+OVERLAP_THRESHOLD = 0.85 
 
+# 3. Initialize the 286x286 DataFrame
+nested_matrix = pd.DataFrame(False, index=gages, columns=gages)
+
+# 4. Use spatial index (sindex) to efficiently check overlapping candidates
+sindex = basins_proj.sindex
+
+for i in range(n):
+    geom_i = geoms[i]
+    area_i = areas[i]
+    
+    # Fast bounding-box filtering
+    possible_matches = list(sindex.intersection(geom_i.bounds))
+    
+    for j in possible_matches:
+        if i >= j:  # Avoid redundant pairs and self-comparison
+            continue
+            
+        geom_j = geoms[j]
+        
+        # Calculate actual intersection if bounding boxes overlap
+        if geom_i.intersects(geom_j):
+            intersection_area = geom_i.intersection(geom_j).area
+            smaller_area = min(area_i, areas[j])
+            
+            # If the intersection makes up most of the smaller watershed's area, they are nested
+            if (intersection_area / smaller_area) >= OVERLAP_THRESHOLD:
+                nested_matrix.iat[i, j] = True
+                nested_matrix.iat[j, i] = True
+# ==========================================
+# 1. HYPERPARAMETERS & CONFIGURATION
+# ==========================================
+TEST_SIZE = 10
+TRAIN_SIZE = 50
+NUM_TRAIN_SETS = 10
+
+AREA_TOLERANCE_FRAC = 0.20 
+MAX_ATTEMPTS = 5
+SEED = 42
+np.random.seed(SEED)
+
+# ==========================================
+# 2. HELPER FUNCTIONS
+# ==========================================
+def sample_non_nested_subset(pool_df, size, nested_mat, target_area=None, area_tol=0.20, max_attempts=1000):
+    """
+    Randomly/greedily samples a mutually non-nested subset of specified size.
+    Enforces target mean area if specified.
+    """
+    pool_gages = pool_df['gage'].values
+    
+    for _ in range(max_attempts):
+        shuffled = np.random.choice(pool_gages, size=len(pool_gages), replace=False)
+        selected = []
+        
+        for gage in shuffled:
+            # Check for mutual nesting among already selected gages in this set
+            if not nested_mat.loc[selected, gage].any() if selected else True:
+                selected.append(gage)
+                if len(selected) == size:
+                    break
+        
+        if len(selected) == size:
+            if target_area is not None:
+                mean_area = pool_df.loc[pool_df['gage'].isin(selected), 'area_km2'].mean()
+                if abs(mean_area - target_area) / target_area <= area_tol:
+                    return selected
+            else:
+                return selected
+
+    raise ValueError(f"Could not find a valid non-nested subset of size {size} within constraints.")
+
+# ==========================================
+# 3. STRATEGIC TESTING SET SELECTION
+# ==========================================
+# Count total nested connections for each gage (excluding self)
+nesting_counts = nested_matrix.sum(axis=1) - nested_matrix.values.diagonal().astype(int)
+rdf['nesting_degree'] = rdf['gage'].map(nesting_counts)
+
+# Filter pristine watersheds
+pristine_pool = rdf[(rdf['diversion_frac'] == 0) & (rdf['dor_pc_pva'] == 0)].copy()
+
+# Sort pristine pool: prioritize large area (descending) and low nesting degree (ascending)
+pristine_pool = pristine_pool.sort_values(
+    by=['nesting_degree', 'area_km2'], 
+    ascending=[True, False]
+)
+
+# Pick the test set prioritizing top candidates
+test_gages = sample_non_nested_subset(
+    pool_df=pristine_pool.head(30), # Top 30 candidate pool balancing area & low nesting
+    size=TEST_SIZE,
+    nested_mat=nested_matrix,
+    max_attempts=MAX_ATTEMPTS
+)
+
+test_set = rdf[rdf['gage'].isin(test_gages)].copy()
+target_mean_area = test_set['area_km2'].mean()
+
+print(f"=== TEST SET SELECTED ({len(test_set)} gages) ===")
+print(f"Mean Area: {target_mean_area:.2f} km²")
+print(f"Mean Nesting Degree: {test_set['nesting_degree'].mean():.1f} connections")
+
+# ==========================================
+# 4. EXCLUDE TEST GAGES & ALL NESTED RELATIVES
+# ==========================================
+# Find all gages nested with ANY test set gage
+test_and_nested_mask = nested_matrix.loc[test_gages].any(axis=0)
+blocked_gages = nested_matrix.columns[test_and_nested_mask].tolist()
+
+# Define candidate pool purely isolated from the test set
+train_eligible_rdf = rdf[~rdf['gage'].isin(blocked_gages)].copy()
+
+print(f"\nTotal Watersheds: {len(rdf)}")
+print(f"Blocked (Test + Nested with Test): {len(blocked_gages)}")
+print(f"Eligible Training Watersheds: {len(train_eligible_rdf)}")
+
+# ==========================================
+# 5. SELECT 10 TRAINING SETS
+# ==========================================
+train_eligible_rdf['reg_score'] = train_eligible_rdf['diversion_frac'] + (train_eligible_rdf['dor_pc_pva'] / 1000)
+target_percentiles = np.linspace(5, 95, NUM_TRAIN_SETS)
+target_reg_values = np.percentile(train_eligible_rdf['reg_score'], target_percentiles)
+
+training_sets = {}
+
+for k, target_reg in enumerate(target_reg_values, 1):
+    train_eligible_rdf['score_diff'] = (train_eligible_rdf['reg_score'] - target_reg).abs()
+    
+    # Take closest candidates to the target regulation level
+    pool_k = train_eligible_rdf.sort_values('score_diff').head(100)
+    
+    train_gages = sample_non_nested_subset(
+        pool_df=pool_k,
+        size=TRAIN_SIZE,
+        nested_mat=nested_matrix,
+        target_area=target_mean_area,
+        area_tol=AREA_TOLERANCE_FRAC,
+        max_attempts=MAX_ATTEMPTS
+    )
+    
+    train_df = rdf[rdf['gage'].isin(train_gages)].copy()
+    training_sets[f'train_set_{k}'] = train_df
+    
+    mean_div = train_df['diversion_frac'].mean()
+    mean_dor = train_df['dor_pc_pva'].mean()
+    mean_area = train_df['area_km2'].mean()
+    print(f"Train Set {k:02d} | Mean Div: {mean_div:.3f} | Mean DOR: {mean_dor:.3f} | Mean Area: {mean_area:.1f} km²")
 
 ############# REMOVE NESTED BASINS ##############
 headwaters = remove_nested_basins(basins)
