@@ -1181,6 +1181,7 @@ results = []
 Q_col = 'Q_cfs'
 for gage in basins.index.to_list():
     rd = {'gage':gage}
+
     # access the csv
     csv = os.path.join(ncwd, fr'timeseries\gr_snodas_flow0\{gage}.csv')
     try:
@@ -1200,11 +1201,11 @@ for gage in basins.index.to_list():
     df = df.loc[first_valid:last_valid]
 
     # calculate mean vars
-    variables = [Q_col, 'pr_sum', 'swe_sum', 'pet_sum', 'tmmx_mean', 'tmmn_mean']
+    variables = [Q_col, 'Q_mmd', 'pr_sum', 'swe_sum', 'pet_sum', 'tmmx_mean', 'tmmn_mean']
     for var in variables:
         rd[f'{var}_mean'] = df[var].mean()
 
-    if np.isnan(rd[f'{Q_col}_mean'])
+    if np.isnan(rd[f'{Q_col}_mean']):
         rd['data'] = False
     # check for NAs
     NAs = 0.1
@@ -1244,9 +1245,11 @@ rdf = pd.DataFrame().from_dict(results)
 rdf = pd.merge(left=basins, right=rdf, on='gage')
 # merge with the attributes
 rdf = pd.merge(left=rdf, right=attrs, on=['gage', 'name'])
+rdf['dor_pc_pva'] = rdf['dor_pc_pva'] / 1000
 
 ############# BASIN SELECTION SCHEME ##################
 rdf = rdf[rdf.data]
+rdf = rdf[rdf.period>365*10]
 
 ############ visualize basin size
 import seaborn as sns
@@ -1327,7 +1330,7 @@ TRAIN_SIZE = 50
 NUM_TRAIN_SETS = 10
 
 AREA_TOLERANCE_FRAC = 0.20 
-MAX_ATTEMPTS = 5
+MAX_ATTEMPTS = 50
 SEED = 42
 np.random.seed(SEED)
 
@@ -1408,36 +1411,101 @@ print(f"Blocked (Test + Nested with Test): {len(blocked_gages)}")
 print(f"Eligible Training Watersheds: {len(train_eligible_rdf)}")
 
 # ==========================================
-# 5. SELECT 10 TRAINING SETS
+# 1. SETUP POOLS & CANDIDATES
 # ==========================================
-train_eligible_rdf['reg_score'] = train_eligible_rdf['diversion_frac'] + (train_eligible_rdf['dor_pc_pva'] / 1000)
-target_percentiles = np.linspace(5, 95, NUM_TRAIN_SETS)
-target_reg_values = np.percentile(train_eligible_rdf['reg_score'], target_percentiles)
+# Pristine watersheds excluding test set and any watersheds nested with test set
+pristine_pool_rm = pristine_pool[~pristine_pool['gage'].isin(blocked_gages)].copy()
 
+# Pool of eligible modified watersheds (non-pristine, non-blocked)
+modified_pool = train_eligible_rdf[
+    (train_eligible_rdf['diversion_frac'] > 0) | (train_eligible_rdf['dor_pc_pva'] > 0)
+].copy()
+
+# Standardize feature scales for accurate Euclidean distance matching (Area & Flow)
+mean_q, std_q = rdf['Q_cfs_mean'].mean(), rdf['Q_cfs_mean'].std()
+mean_a, std_a = rdf['area_km2'].mean(), rdf['area_km2'].std()
+
+def calc_distance(df1, df2):
+    """Calculates standardized Euclidean distance in (Q_cfs_mean, area_km2) space."""
+    q_diff = (df1['Q_cfs_mean'] - df2['Q_cfs_mean']) / std_q
+    a_diff = (df1['area_km2'] - df2['area_km2']) / std_a
+    return np.sqrt(q_diff**2 + a_diff**2)
+
+# ==========================================
+# 2. ITERATIVE SWAPPING ALGORITHM
+# ==========================================
 training_sets = {}
 
-for k, target_reg in enumerate(target_reg_values, 1):
-    train_eligible_rdf['score_diff'] = (train_eligible_rdf['reg_score'] - target_reg).abs()
+# Set 0: Purely pristine starting baseline (49 watersheds)
+current_gages = pristine_pool_rm['gage'].tolist()
+training_sets['train_set_0'] = rdf[rdf['gage'].isin(current_gages)].copy()
+
+pristine_gages_remaining = current_gages.copy()
+used_modified_gages = set()
+
+NUM_STEPS = 5
+REPLACEMENTS_PER_STEP = 10
+
+for step in range(1, NUM_STEPS + 1):
+    replacements_made = 0
     
-    # Take closest candidates to the target regulation level
-    pool_k = train_eligible_rdf.sort_values('score_diff').head(100)
+    # Identify which pristine gages currently in the set have nesting conflicts within current_gages
+    sub_matrix = nested_matrix.loc[current_gages, current_gages].values.copy()
+    np.fill_diagonal(sub_matrix, False)
     
-    train_gages = sample_non_nested_subset(
-        pool_df=pool_k,
-        size=TRAIN_SIZE,
-        nested_mat=nested_matrix,
-        target_area=target_mean_area,
-        area_tol=AREA_TOLERANCE_FRAC,
-        max_attempts=MAX_ATTEMPTS
-    )
+    # Count how many internal nesting conflicts each gage has
+    nesting_counts = pd.Series(sub_matrix.sum(axis=1), index=current_gages)
     
-    train_df = rdf[rdf['gage'].isin(train_gages)].copy()
-    training_sets[f'train_set_{k}'] = train_df
+    # Prioritize swapping out pristine gages that cause internal nesting, then random/largest pristine
+    pristine_candidates = [g for g in pristine_gages_remaining if g in current_gages]
+    pristine_candidates.sort(key=lambda g: (-nesting_counts[g], -rdf.loc[rdf['gage'] == g, 'area_km2'].values[0]))
+
+    for p_gage in pristine_candidates:
+        if replacements_made >= REPLACEMENTS_PER_STEP:
+            break
+            
+        p_row = rdf[rdf['gage'] == p_gage].iloc[0]
+        
+        # Filter available modified gages
+        avail_mod = modified_pool[~modified_pool['gage'].isin(used_modified_gages)].copy()
+        if avail_mod.empty:
+            break
+            
+        # Sort modified candidates by distance in (Q, Area) space to the pristine gage being replaced
+        avail_mod['dist'] = calc_distance(avail_mod, p_row)
+        avail_mod = avail_mod.sort_values('dist')
+        
+        # Temporary set without the pristine gage being swapped out
+        temp_set = [g for g in current_gages if g != p_gage]
+        
+        # Find the best modified candidate that introduces NO nesting with the remaining set
+        selected_mod_gage = None
+        for m_gage in avail_mod['gage']:
+            if not nested_matrix.loc[temp_set, m_gage].any():
+                selected_mod_gage = m_gage
+                break
+                
+        # Perform swap if valid match found
+        if selected_mod_gage is not None:
+            current_gages.remove(p_gage)
+            pristine_gages_remaining.remove(p_gage)
+            current_gages.append(selected_mod_gage)
+            used_modified_gages.add(selected_mod_gage)
+            replacements_made += 1
+
+    # Save the updated training set for this step
+    train_df = rdf[rdf['gage'].isin(current_gages)].copy()
+    training_sets[f'train_set_{step}'] = train_df
     
+    # Print status summary
+    num_pristine = train_df['gage'].isin(pristine_pool['gage']).sum()
+    num_mod = len(train_df) - num_pristine
+    mean_q_val = train_df['Q_cfs_mean'].mean()
+    mean_a_val = train_df['area_km2'].mean()
     mean_div = train_df['diversion_frac'].mean()
-    mean_dor = train_df['dor_pc_pva'].mean()
-    mean_area = train_df['area_km2'].mean()
-    print(f"Train Set {k:02d} | Mean Div: {mean_div:.3f} | Mean DOR: {mean_dor:.3f} | Mean Area: {mean_area:.1f} km²")
+    
+    print(f"Train Set {step} | Size: {len(train_df)} | Pristine: {num_pristine} | Modified: {num_mod} | "
+          f"Mean Q: {mean_q_val:.1f} cfs | Mean Area: {mean_a_val:.1f} km² | Mean Div: {mean_div:.3f}")
 
 ############# REMOVE NESTED BASINS ##############
 headwaters = remove_nested_basins(basins)
