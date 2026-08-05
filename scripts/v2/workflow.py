@@ -35,6 +35,75 @@ appcwd = os.path.join(cwd, r'shiny-app\ucol_natural')
 appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
 
 # Now we need to select basins for training, testing, and implementation
+def count_complete_water_years(df: pd.DataFrame, col: str) -> int:
+    """
+    Counts the number of water years (Oct 1 to Sep 30) with 100% valid data.
+    
+    A water year is considered complete only if every required calendar day 
+    (365 days, or 366 in a leap year) is present and non-null in the column.
+    """
+    if col not in df.columns or df.empty:
+        return 0
+    
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.set_index('date')
+
+    # 1. Assign Water Year (WY): Oct-Dec belong to the next calendar year's WY
+    water_years = df.index.year + (df.index.month >= 10).astype(int)
+
+    # 2. Count non-null days per water year
+    valid_counts = df[col].notna().groupby(water_years).sum()
+
+    # 3. Verify against expected days (accounting for leap years)
+    complete_count = 0
+    for wy, valid_days in valid_counts.items():
+        wy_start = pd.Timestamp(year=wy - 1, month=10, day=1)
+        wy_end = pd.Timestamp(year=wy, month=9, day=30)
+        expected_days = (wy_end - wy_start).days + 1
+
+        if valid_days == expected_days:
+            complete_count += 1
+
+    return complete_count
+
+def plot_hydrograph(df: pd.DataFrame, Q='Q_cfs', title: str = "Hydrograph") -> None:
+    """Plots a hydrograph for a DataFrame with a datetime index and 'Q' column.
+
+    Restricts the display range between the first and last valid 'Q' values.
+    """
+    # Identify non-null Q entries
+    valid_q = df[Q].dropna()
+
+    if valid_q.empty:
+        raise ValueError("No valid 'Q' data found in the DataFrame.")
+
+    # Determine start and end datetime bounds
+    first_valid = valid_q.index[0]
+    last_valid = valid_q.index[-1]
+
+    # Slice the DataFrame to the valid date range
+    df_sliced = df.loc[first_valid:last_valid]
+
+    # Plot creation
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(
+        df_sliced.index,
+        df_sliced[Q],
+        color="tab:blue",
+        linewidth=1.5,
+        label="Discharge (Q)",
+    )
+
+    # Formatting
+    ax.set_title(title, fontsize=14, fontweight="bold")
+    ax.set_xlabel("Date", fontsize=11)
+    ax.set_ylabel("Discharge ($Q$)", fontsize=11)
+    ax.set_xlim(first_valid, last_valid)
+    ax.grid(True, linestyle="--", alpha=0.6)
+
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    plt.show()
 
 def diagnose_gage_quality(df, completion_threshold=0.90):
     """
@@ -1121,7 +1190,7 @@ for gage in basins.gage:
 #############
 # Merge with flow with 0 interpolation
 #############
-for gage in train_eligible_rdf[train_eligible_rdf['diversion_frac'].isna()].gage:
+for gage in basins.index:
 
     outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
     outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow0\{gage}.csv'
@@ -1158,6 +1227,9 @@ for gage in train_eligible_rdf[train_eligible_rdf['diversion_frac'].isna()].gage
 
 ############# REMOVE BASINS WITH TOO MUCH DAM STORAGE OR DIVERSION ##############
 # SKIP STEPS BY READING HERE
+# check for data completeness and prepare for modelling
+gcwd = r'G:\My Drive\natural_streamflow_colab' # where to save things on your machine
+dcwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow0'
 basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
 gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 basins = gpd.read_parquet(basins_path)
@@ -1174,12 +1246,24 @@ basins = basins.set_index('gage')
 attrs['name'] = basins.name
 name_col = attrs.pop("name")
 attrs.insert(0, "name", name_col)
+attrs['gage'] = attrs.index
+attrs.reset_index(drop=True, inplace=True)
 attrs.to_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
+attrs.to_parquet(os.path.join(gcwd, r'timeseries\basinCharacteristics.parquet'))
+attrs = pd.read_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
 
-# check for data completeness
+
+units = ['cfs', 'mmd', 'cms']
+Q_cols = []
+for unit in units:
+    Q_cols.append(f'Q_{unit}')
+    Q_cols.append(f'Q_NAT_{unit}')
+    Q_cols.append(f'Q_CU_{unit}')
+
 results = []
 Q_col = 'Q_cfs'
 for gage in basins.index.to_list():
+    print(gage)
     rd = {'gage':gage}
 
     # access the csv
@@ -1198,27 +1282,27 @@ for gage in basins.index.to_list():
     last_valid = df[Q_col].last_valid_index()
 
     # limit to valid dates
-    df = df.loc[first_valid:last_valid]
+    df = df.loc[first_valid:last_valid].copy()
+    df = df.asfreq('D')
+    period_length = len(df)
+
+    if period_length<1:
+        rd['data'] = False
+        continue
 
     # calculate mean vars
     variables = [Q_col, 'Q_mmd', 'pr_sum', 'swe_sum', 'pet_sum', 'tmmx_mean', 'tmmn_mean']
     for var in variables:
         rd[f'{var}_mean'] = df[var].mean()
 
-    if np.isnan(rd[f'{Q_col}_mean']):
-        rd['data'] = False
     # check for NAs
-    NAs = 0.1
     NA_ratio = df[Q_col].isna().sum() / len(df)
     rd['NA_ratio'] = NA_ratio
 
     # check length
-    days = 365*2
-    period = len(df)
-
     rd['firstday'] = first_valid
     rd['lastday'] = last_valid
-    rd['period'] = period
+    rd['period'] = period_length
 
     # CONSUMPTIVE USE
     CU_vars = ['irrigation' , 'municipal', 'intrabasin', 'interbasin', 'industrial']
@@ -1236,54 +1320,101 @@ for gage in basins.index.to_list():
     Q = df['Q_cfs'].sum()
     divert_ratio = 0.1
     divert = CU/Q
-    rd['diversion_frac'] = divert
+    rd['cu_frac'] = divert
+
+    # Ensure Q_NAT_cfs exists; if missing, mirror Q_cfs
+    for Q in Q_cols:
+        if 'CU' not in Q and 'NAT' not in Q:
+            Q_actual = Q_col
+        if Q not in df.columns and 'NAT' in Q: # make natural columns match observed
+            df[Q] = df[Q_actual]
+        if Q not in df.columns and 'CU' in Q: # make CU columns zero
+            df[Q] = 0
+
+    # Track missing Q values prior to interpolation
+    q_was_na = df[Q_col].isna()
+
+    # Interpolate Q columns (limit of 30 days)
+    limit=14
+    df[Q_cols] = df[Q_cols].ffill(limit=limit)
+
+
+    # Flag days where any Q column was successfully filled via interpolation
+    q_is_now_valid = df[Q_col].notna()
+    df['is_Q_interpolated'] = np.where(q_is_now_valid & q_was_na, True, False)
+
+    # Interpolate all remaining numeric columns (limit of 30 days)
+    other_cols = [col for col in df.columns if col not in Q_cols and col != 'is_Q_interpolated']
+    df[other_cols] = df[other_cols].interpolate(method='time', limit=limit)
+
+    # Calculate metrics
+    num_interpolated_days = df['is_Q_interpolated'].sum()
+    frac_interpolated = num_interpolated_days / period_length if period_length > 0 else 0
+    
+    # Days with complete Q data after interpolation
+    days_with_data_after = df[Q_cols].notna().all(axis=1).sum()
+    frac_data_after = days_with_data_after / period_length if period_length > 0 else 0
+
+
+    cols = ['date', 'gage', 'srad_mean', 'rmax_mean', 'rmin_mean', 'tmmn_mean', 'tmmx_mean', 'vpd_mean', 'pet_sum', 'pr_sum', 'swe_sum', 'Q_cms', 'Q_cfs',
+       'Q_mmd', 'Q_CU_cfs', 'Q_CU_cms', 'Q_CU_mmd', 'Q_NAT_cfs', 'Q_NAT_cms', 'Q_NAT_mmd', 'is_Q_interpolated']
+    df['gage'] = gage
+    df['date'] = df.index
+    df = df[cols]
+    rm = set(['gage', 'date', 'is_Q_interpolated'])
+    cols_to_null = list(set(cols) - rm)
+    df.loc[df['Q_cfs'].isna(), cols_to_null] = np.nan
+
+    df.reset_index(drop=True, inplace=True)
+
+    df.to_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
+    # df = pd.read_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
+    # df['date'] = pd.to_datetime(df['date'])
+    # df = df.set_index('date')
+
+    # Store results
+    wys = count_complete_water_years(df, 'Q_cfs')
+
+    rd.update({
+        'period_start': first_valid,
+        'period_end': last_valid,
+        'num_interpolated_days': num_interpolated_days,
+        'frac_interpolated_days': frac_interpolated,
+        'frac_data_after_interp': frac_data_after,
+        'wys': wys
+    })
 
     results.append(rd)
 
 rdf = pd.DataFrame().from_dict(results)
 # marge with the geometry and area
-rdf = pd.merge(left=basins, right=rdf, on='gage')
+rdf.set_index('gage')
+rdf = pd.merge(left=basins, right=rdf, left_index=True, right_index=True)
 # merge with the attributes
-rdf = pd.merge(left=rdf, right=attrs, on=['gage', 'name'])
+attrs_vars = ['name', 'dor_pc_pva', 'rev_mc_usu', 'dis_m3_pyr']
+rdf = pd.merge(left=rdf, right=attrs[attrs_vars], on=['gage', 'name'])
 rdf['dor_pc_pva'] = rdf['dor_pc_pva'] / 1000
 
 ############# BASIN SELECTION SCHEME ##################
-rdf = rdf[rdf.data]
-rdf = rdf[rdf.period>365*10]
+rdf = rdf[rdf.data] # gotta have streamflow
+rdf = rdf[rdf.wys>5] # gotta have at least 5 good wys
 
-############ visualize basin size
-import seaborn as sns
-var='diversion_frac'
-sns.histplot(data=rdf, x=var, bins=20, log_scale=True, color='skyblue', edgecolor='black')
-plt.title(f'Histogram of {var}')
-plt.ylabel('Count')
-plt.grid(axis='y', alpha=0.5)
-plt.show()
+# fix taylor park reservoir
+meanq = rdf[rdf['gage']=='09109000']['Q_cfs_mean'].iloc[0] * 31556926 # mean cfs * seconds in a year = mean yearly Q in cubic feet
+damstorage = 106200 * 43559.9 # acre feet storage to cubic feet
+dor = damstorage / meanq
+rdf['dor_pc_pva'] = np.where(rdf['gage']=='09109000', dor, rdf['dor_pc_pva'])
+rdf = rdf.set_index('gage')
 
-from sklearn.model_selection import train_test_split
-# which have enough data to be suitable for training and testing?
-NA_thresh = 0.15
-period_thresh = 365*1
-rdf2 = rdf[(rdf.NA_ratio < NA_thresh) & (rdf.period > period_thresh)]
-
-# We select the testing basins from the purely natural.
-strat = 'Q_cfs_mean'
-strat_col = f'strata_{strat}'
-bins=10
-
-rdf2[strat_col] = pd.cut(rdf2[strat], bins=10)
-natty = rdf2[(rdf2.diversion_frac==0) & (rdf2.dor_pc_pva == 0)]
-test_size = 10/len(natty) # I want 10 basins
-
-_, test_df = train_test_split(natty, test_size=test_size, stratify=natty[strat_col], random_state=42)
-test_df[['name', 'geometry']].explore()
+# add a score for regulation
+rdf['reg_score'] = rdf['cu_frac'].fillna(0) + rdf['dor_pc_pva'].fillna(0)
 
 ################# Nested matrix ##################
 # 1. Ensure a projected CRS for accurate area calculations (reproject if geographic)
-if basins.crs is not None and basins.crs.is_geographic:
-    basins_proj = basins.to_crs(basins.estimate_utm_crs())
+if rdf.crs is not None and rdf.crs.is_geographic:
+    basins_proj = rdf.to_crs(basins.estimate_utm_crs())
 else:
-    basins_proj = basins.copy()
+    basins_proj = rdf.copy()
 
 # Extract geometries, areas, and gage IDs
 gages = basins_proj.index.values
@@ -1322,6 +1453,8 @@ for i in range(n):
             if (intersection_area / smaller_area) >= OVERLAP_THRESHOLD:
                 nested_matrix.iat[i, j] = True
                 nested_matrix.iat[j, i] = True
+
+np.fill_diagonal(nested_matrix.values, True) # basins are nested with themselves
 # ==========================================
 # 1. HYPERPARAMETERS & CONFIGURATION
 # ==========================================
@@ -1370,26 +1503,36 @@ def sample_non_nested_subset(pool_df, size, nested_mat, target_area=None, area_t
 # ==========================================
 # Count total nested connections for each gage (excluding self)
 nesting_counts = nested_matrix.sum(axis=1) - nested_matrix.values.diagonal().astype(int)
-rdf['nesting_degree'] = rdf['gage'].map(nesting_counts)
+rdf['nesting_degree'] = rdf.index.map(nesting_counts)
 
 # Filter pristine watersheds
-pristine_pool = rdf[(rdf['diversion_frac'] == 0) & (rdf['dor_pc_pva'] == 0)].copy()
+pristine_pool = rdf[(rdf['cu_frac'] == 0) & (rdf['dor_pc_pva'] == 0)].copy()
 
 # Sort pristine pool: prioritize large area (descending) and low nesting degree (ascending)
 pristine_pool = pristine_pool.sort_values(
-    by=['nesting_degree', 'area_km2'], 
-    ascending=[True, False]
+    by=['nesting_degree'], 
+    ascending=[True]
 )
 
-# Pick the test set prioritizing top candidates
-test_gages = sample_non_nested_subset(
-    pool_df=pristine_pool.head(30), # Top 30 candidate pool balancing area & low nesting
-    size=TEST_SIZE,
-    nested_mat=nested_matrix,
-    max_attempts=MAX_ATTEMPTS
-)
+pristine_pool.iloc[0:15][['name', 'geometry']].explore()
+# Mannually pick the test set
+for gage in pristine_pool.iloc[0:15].index:
+    df = pd.read_csv(os.path.join(appDir, f'{gage}.csv'), parse_dates=['date'], index_col='date')
+    plot_hydrograph(df, 'Q_cfs', gage)
 
-test_set = rdf[rdf['gage'].isin(test_gages)].copy()
+test_gages = [
+    '09266500', 
+    '09210500', 
+    '09223000', 
+    '09312600',
+    '09310700', 
+    '09253000', 
+    '383926107593001', 
+    '09123450', 
+    '09306255', 
+    '09081600']
+
+test_set = rdf[rdf.index.isin(test_gages)].copy()
 target_mean_area = test_set['area_km2'].mean()
 
 print(f"=== TEST SET SELECTED ({len(test_set)} gages) ===")
@@ -1404,129 +1547,163 @@ test_and_nested_mask = nested_matrix.loc[test_gages].any(axis=0)
 blocked_gages = nested_matrix.columns[test_and_nested_mask].tolist()
 
 # Define candidate pool purely isolated from the test set
-train_eligible_rdf = rdf[~rdf['gage'].isin(blocked_gages)].copy()
+train_eligible_rdf = rdf[~rdf.index.isin(blocked_gages)].copy()
 
 print(f"\nTotal Watersheds: {len(rdf)}")
 print(f"Blocked (Test + Nested with Test): {len(blocked_gages)}")
 print(f"Eligible Training Watersheds: {len(train_eligible_rdf)}")
 
-# ==========================================
-# 1. SETUP POOLS & CANDIDATES
-# ==========================================
 # Pristine watersheds excluding test set and any watersheds nested with test set
-pristine_pool_rm = pristine_pool[~pristine_pool['gage'].isin(blocked_gages)].copy()
+pristine_pool_rm = pristine_pool[~pristine_pool.index.isin(blocked_gages)].copy()
+print(f'pristine options left {len(pristine_pool_rm)}')
 
-# Pool of eligible modified watersheds (non-pristine, non-blocked)
-modified_pool = train_eligible_rdf[
-    (train_eligible_rdf['diversion_frac'] > 0) | (train_eligible_rdf['dor_pc_pva'] > 0)
-].copy()
+# Pool of all candidate modified watersheds
+modified_pool = train_eligible_rdf[rdf['reg_score'] > 0].copy()
 
-# Standardize feature scales for accurate Euclidean distance matching (Area & Flow)
-mean_q, std_q = rdf['Q_cfs_mean'].mean(), rdf['Q_cfs_mean'].std()
-mean_a, std_a = rdf['area_km2'].mean(), rdf['area_km2'].std()
+# Standardize feature scales for distance matching (Area & Flow)
+match1 = 'area_km2'
+match2 = 'pr_sum_mean'
+mean_q, std_q = rdf[match1].mean(), rdf[match1].std()
+mean_a, std_a = rdf[match2].mean(), rdf[match2].std()
 
 def calc_distance(df1, df2):
     """Calculates standardized Euclidean distance in (Q_cfs_mean, area_km2) space."""
-    q_diff = (df1['Q_cfs_mean'] - df2['Q_cfs_mean']) / std_q
-    a_diff = (df1['area_km2'] - df2['area_km2']) / std_a
+    q_diff = (df1[match1] - df2[match1]) / std_q
+    a_diff = (df1[match2] - df2[match2]) / std_a
     return np.sqrt(q_diff**2 + a_diff**2)
 
 # ==========================================
-# 2. ITERATIVE SWAPPING ALGORITHM
+# 2. CONTINUOUS INCREMENTAL SWAPPING ALGORITHM
 # ==========================================
 training_sets = {}
 
-# Set 0: Purely pristine starting baseline (49 watersheds)
-current_gages = pristine_pool_rm['gage'].tolist()
-training_sets['train_set_0'] = rdf[rdf['gage'].isin(current_gages)].copy()
+# Set 0: Purely pristine starting baseline
+current_gages = pristine_pool_rm.index.tolist()
+train_df = rdf[rdf.index.isin(current_gages)].copy()
+train_df['set'] = 0
+training_sets['train_set_0'] = train_df
 
-pristine_gages_remaining = current_gages.copy()
 used_modified_gages = set()
 
-NUM_STEPS = 5
-REPLACEMENTS_PER_STEP = 10
+NUM_STEPS = 10
+REPLACEMENTS_PER_STEP = 5
 
 for step in range(1, NUM_STEPS + 1):
     replacements_made = 0
     
-    # Identify which pristine gages currently in the set have nesting conflicts within current_gages
+    # Identify internal nesting conflicts within current_gages
     sub_matrix = nested_matrix.loc[current_gages, current_gages].values.copy()
     np.fill_diagonal(sub_matrix, False)
-    
-    # Count how many internal nesting conflicts each gage has
     nesting_counts = pd.Series(sub_matrix.sum(axis=1), index=current_gages)
     
-    # Prioritize swapping out pristine gages that cause internal nesting, then random/largest pristine
-    pristine_candidates = [g for g in pristine_gages_remaining if g in current_gages]
-    pristine_candidates.sort(key=lambda g: (-nesting_counts[g], -rdf.loc[rdf['gage'] == g, 'area_km2'].values[0]))
+    # SORT CANDIDATES TO REMOVE FROM CURRENT SET:
+    # 1. Nesting conflicts first (highest count)
+    # 2. Lowest regulation score (pristine first, then least-modified)
+    # 3. Largest area
+    current_df = rdf[rdf.index.isin(current_gages)].copy()
+    current_df['nest_count'] = current_df.index.map(nesting_counts)
+    
+    removal_candidates = current_df.sort_values(
+        by=['nest_count', 'reg_score', 'area_km2'],
+        ascending=[False, True, False]
+    ).index.tolist()
 
-    for p_gage in pristine_candidates:
+    for target_gage in removal_candidates:
         if replacements_made >= REPLACEMENTS_PER_STEP:
             break
             
-        p_row = rdf[rdf['gage'] == p_gage].iloc[0]
+        target_row = rdf[rdf.index == target_gage].iloc[0]
         
-        # Filter available modified gages
-        avail_mod = modified_pool[~modified_pool['gage'].isin(used_modified_gages)].copy()
+        # Filter available modified gages that have higher reg_score than target_row
+        # (Ensures the set becomes progressively more modified over time)
+        avail_mod = modified_pool[
+            (~modified_pool.index.isin(used_modified_gages)) &
+            (modified_pool['reg_score'] >= target_row['reg_score'])
+        ].copy()
+        
+        # If no strictly higher modified gages exist, fallback to any unused modified gage
         if avail_mod.empty:
-            break
+            avail_mod = modified_pool[~modified_pool.index.isin(used_modified_gages)].copy()
+            if avail_mod.empty:
+                break  # Exhausted candidate pool
             
-        # Sort modified candidates by distance in (Q, Area) space to the pristine gage being replaced
-        avail_mod['dist'] = calc_distance(avail_mod, p_row)
+        # Match by nearest (Q_cfs_mean, area_km2) distance
+        avail_mod['dist'] = calc_distance(avail_mod, target_row)
         avail_mod = avail_mod.sort_values('dist')
         
-        # Temporary set without the pristine gage being swapped out
-        temp_set = [g for g in current_gages if g != p_gage]
+        temp_set = [g for g in current_gages if g != target_gage]
         
-        # Find the best modified candidate that introduces NO nesting with the remaining set
+        # Find best candidate with ZERO spatial nesting in the remaining set
         selected_mod_gage = None
-        for m_gage in avail_mod['gage']:
+        for m_gage in avail_mod.index:
             if not nested_matrix.loc[temp_set, m_gage].any():
                 selected_mod_gage = m_gage
                 break
                 
-        # Perform swap if valid match found
+        # Perform swap
         if selected_mod_gage is not None:
-            current_gages.remove(p_gage)
-            pristine_gages_remaining.remove(p_gage)
+            current_gages.remove(target_gage)
             current_gages.append(selected_mod_gage)
             used_modified_gages.add(selected_mod_gage)
             replacements_made += 1
 
-    # Save the updated training set for this step
-    train_df = rdf[rdf['gage'].isin(current_gages)].copy()
+    # Store resulting training set
+    train_df = rdf[rdf.index.isin(current_gages)].copy()
+    train_df['set'] = step
     training_sets[f'train_set_{step}'] = train_df
     
-    # Print status summary
-    num_pristine = train_df['gage'].isin(pristine_pool['gage']).sum()
+    # Logging
+    num_pristine = (train_df['reg_score'] == 0).sum()
     num_mod = len(train_df) - num_pristine
     mean_q_val = train_df['Q_cfs_mean'].mean()
     mean_a_val = train_df['area_km2'].mean()
-    mean_div = train_df['diversion_frac'].mean()
+    mean_reg = train_df['reg_score'].mean()
+    days = int(train_df['period'].sum())
     
-    print(f"Train Set {step} | Size: {len(train_df)} | Pristine: {num_pristine} | Modified: {num_mod} | "
-          f"Mean Q: {mean_q_val:.1f} cfs | Mean Area: {mean_a_val:.1f} km² | Mean Div: {mean_div:.3f}")
+    print(f"Train Set {step:02d} | Pristine: {num_pristine:02d} | Modified: {num_mod:02d} | Days: {days} | "
+          f"Mean Reg Score: {mean_reg:.3f} | Mean Q: {mean_q_val:.1f} cfs | Mean Area: {mean_a_val:.1f} km²")
 
-############# REMOVE NESTED BASINS ##############
-headwaters = remove_nested_basins(basins)
-headwaters.explore()
-headwaters_path = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\shapefiles\UCOL_headwaters_sheds.gpkg'
-headwaters.to_file(headwaters_path, driver='GPKG')
-headwaters_path2 = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\shapefiles\UCOL_headwaters_sheds2.shp'
-headwaters.to_file(headwaters_path2)
-headwaters = gpd.read_file(headwaters_path)
+set10 = training_sets['train_set_10']
+set10[['name', 'geometry']].explore()
 
-# Save to file
-gages_headwaters = gages[gages.index.isin(headwaters['gage'])]
-gages_headwaters.to_file(join(ncwd, r"data\shapefiles\UCOL_headwater_gages.gpkg"), driver="GPKG")
+################
+# PREP NH
+################
+import yaml
+ccwd = r'/content/drive/MyDrive/natural_streamflow_colab' # how to write file paths so Collab can read them
+# 1. Save test_set.txt (list of gage IDs separated by line breaks)
+test_set_path = os.path.join(gcwd, 'configs', 'test_set.txt')
+with open(test_set_path, 'w') as f:
+    f.write('\n'.join(map(str, test_gages)))
+test_set_gpath = f'{ccwd}configs/test_set.txt'
 
-# add in camels
-# maybeee
+# Path to template YAML
+config_temp = os.path.join(gcwd, 'configs', 'config_template.yml')
 
-# maybe later we will grab data for these
-parents = basins[~basins.gage.isin(headwaters.gage)]
+# 2. Iterate through training sets, save text files, and generate modified YAMLs
+for i in range(11):
+    key = f'train_set_{i}'
+    tset = training_sets[key]
+    tset_gages = tset.index.to_list()
 
+    # Save the training set gage list to a .txt file
+    tset_txt_path = os.path.join(gcwd, 'configs', f'{key}.txt')
+    with open(tset_txt_path, 'w') as f:
+        f.write('\n'.join(map(str, tset_gages)))
 
+    # Path to reference in YAML (using ccwd as specified)
+    train_set_gpath = f"{ccwd}/configs/{key}.txt"
 
+    # Read config template
+    with open(config_temp, 'r') as f:
+        config_data = yaml.safe_load(f)
 
+    # Modify basin file paths to point to the current training set path
+    config_data['validation_basin_file'] = train_set_gpath
+    config_data['train_basin_file'] = train_set_gpath
+    config_data['test_basin_file'] = test_set_gpath
 
+    # Save modified configuration to new YAML file
+    config_path = os.path.join(gcwd, 'configs', f'config_{key}.yml')
+    with open(config_path, 'w') as f:
+        yaml.safe_dump(config_data, f, default_flow_style=False)
