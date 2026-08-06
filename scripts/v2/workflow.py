@@ -1367,7 +1367,7 @@ for gage in basins.index.to_list():
 
     df.reset_index(drop=True, inplace=True)
 
-    df.to_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
+    #df.to_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
     # df = pd.read_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
     # df['date'] = pd.to_datetime(df['date'])
     # df = df.set_index('date')
@@ -1388,11 +1388,11 @@ for gage in basins.index.to_list():
 
 rdf = pd.DataFrame().from_dict(results)
 # marge with the geometry and area
-rdf.set_index('gage')
+rdf = rdf.set_index('gage')
 rdf = pd.merge(left=basins, right=rdf, left_index=True, right_index=True)
 # merge with the attributes
-attrs_vars = ['name', 'dor_pc_pva', 'rev_mc_usu', 'dis_m3_pyr']
-rdf = pd.merge(left=rdf, right=attrs[attrs_vars], on=['gage', 'name'])
+attrs_vars = ['dor_pc_pva', 'rev_mc_usu', 'dis_m3_pyr']
+rdf = pd.merge(left=rdf, right=attrs[attrs_vars], left_index=True, right_index=True)
 rdf['dor_pc_pva'] = rdf['dor_pc_pva'] / 1000
 
 ############# BASIN SELECTION SCHEME ##################
@@ -1400,11 +1400,11 @@ rdf = rdf[rdf.data] # gotta have streamflow
 rdf = rdf[rdf.wys>5] # gotta have at least 5 good wys
 
 # fix taylor park reservoir
-meanq = rdf[rdf['gage']=='09109000']['Q_cfs_mean'].iloc[0] * 31556926 # mean cfs * seconds in a year = mean yearly Q in cubic feet
+tp = '09109000'
+meanq = rdf[rdf.index==tp]['Q_cfs_mean'].iloc[0] * 31556926 # mean cfs * seconds in a year = mean yearly Q in cubic feet
 damstorage = 106200 * 43559.9 # acre feet storage to cubic feet
 dor = damstorage / meanq
-rdf['dor_pc_pva'] = np.where(rdf['gage']=='09109000', dor, rdf['dor_pc_pva'])
-rdf = rdf.set_index('gage')
+rdf['dor_pc_pva'] = np.where(rdf.index==tp, dor, rdf['dor_pc_pva'])
 
 # add a score for regulation
 rdf['reg_score'] = rdf['cu_frac'].fillna(0) + rdf['dor_pc_pva'].fillna(0)
@@ -1427,6 +1427,7 @@ OVERLAP_THRESHOLD = 0.85
 
 # 3. Initialize the 286x286 DataFrame
 nested_matrix = pd.DataFrame(False, index=gages, columns=gages)
+
 
 # 4. Use spatial index (sindex) to efficiently check overlapping candidates
 sindex = basins_proj.sindex
@@ -1454,7 +1455,7 @@ for i in range(n):
                 nested_matrix.iat[i, j] = True
                 nested_matrix.iat[j, i] = True
 
-np.fill_diagonal(nested_matrix.values, True) # basins are nested with themselves
+np.fill_diagonal(nested_matrix.values.copy(), True) # basins are nested with themselves
 # ==========================================
 # 1. HYPERPARAMETERS & CONFIGURATION
 # ==========================================
@@ -1462,7 +1463,6 @@ TEST_SIZE = 10
 TRAIN_SIZE = 50
 NUM_TRAIN_SETS = 10
 
-AREA_TOLERANCE_FRAC = 0.20 
 MAX_ATTEMPTS = 50
 SEED = 42
 np.random.seed(SEED)
@@ -1675,10 +1675,10 @@ ccwd = r'/content/drive/MyDrive/natural_streamflow_colab' # how to write file pa
 test_set_path = os.path.join(gcwd, 'configs', 'test_set.txt')
 with open(test_set_path, 'w') as f:
     f.write('\n'.join(map(str, test_gages)))
-test_set_gpath = f'{ccwd}configs/test_set.txt'
+test_set_gpath = f'{ccwd}/configs/test_set.txt'
 
 # Path to template YAML
-config_temp = os.path.join(gcwd, 'configs', 'config_template.yml')
+config_temp = os.path.join(gcwd, 'configs', 'config_template_cuda.yml')
 
 # 2. Iterate through training sets, save text files, and generate modified YAMLs
 for i in range(11):
