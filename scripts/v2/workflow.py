@@ -574,6 +574,7 @@ if not skip:
     ucol = nldi.get_basins(ucol_gage)['geometry'].iloc[0]
     ucol_geom = remove_polygon_holes(ucol)
     ucol = gpd.GeoDataFrame(geometry=[ucol_geom], crs=4326)
+    ucol.to_file(os.path.join(ncwd, r'spatial_data\UCOL.shp'))
     ucol.to_parquet(os.path.join(ncwd, r'spatial_data\UCOL.parquet'))
     ucol.to_parquet(os.path.join(appcwd, r'spatial_data\UCOL.parquet'))
 
@@ -622,6 +623,7 @@ if not skip:
     gages = pps.set_crs("EPSG:4326")
 
     ###################### STEP 2: Delineate watersheds from NLDI #####################
+
     nldi  = NLDI()
     basins_list = []
     for id in gages['gage'].to_list():
@@ -795,6 +797,19 @@ if not skip:
     # DIVERSIONS
     # COLUMN = siteID
 
+############# CONSIDER MANUALLY DELINEATING ALL OF THEM #########################
+gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
+watershed_polygons_gdf = delineate_watersheds_preprocessed(
+        fdir_path=fdir_path,
+        acc_path=acc_path,
+        points_gdf=need_basin,
+        gage_col='gage'
+    )
+man_delin = gpd.GeoDataFrame().from_dict(watershed_polygons_gdf)
+man_delin.geometry.crs = 4326
+man_delin = pd.merge(left=man_delin, right=gages[['gage', 'name']], on='gage', how='left')
+man_delin.to_file(os.path.join(ncwd, r'data/shapefiles/man_delin2.shp'))
+
 skip2 = False
 if not skip2:
     ###################
@@ -806,7 +821,7 @@ if not skip2:
     big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
     flow = pd.read_csv(big_flow_path).set_index('date')
     flow.index = pd.to_datetime(flow.index)
-        # fix timeseries index
+    # fix timeseries index
     flow.index = flow.index.normalize().tz_localize(None)
     # rename columns
     rename_dict = {}
@@ -1252,7 +1267,6 @@ attrs.to_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet')
 attrs.to_parquet(os.path.join(gcwd, r'timeseries\basinCharacteristics.parquet'))
 attrs = pd.read_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
 
-
 units = ['cfs', 'mmd', 'cms']
 Q_cols = []
 for unit in units:
@@ -1391,7 +1405,9 @@ rdf = pd.DataFrame().from_dict(results)
 rdf = rdf.set_index('gage')
 rdf = pd.merge(left=basins, right=rdf, left_index=True, right_index=True)
 # merge with the attributes
+attrs = pd.read_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
 attrs_vars = ['dor_pc_pva', 'rev_mc_usu', 'dis_m3_pyr']
+attrs = attrs.set_index('gage')
 rdf = pd.merge(left=rdf, right=attrs[attrs_vars], left_index=True, right_index=True)
 rdf['dor_pc_pva'] = rdf['dor_pc_pva'] / 1000
 
@@ -1455,7 +1471,7 @@ for i in range(n):
                 nested_matrix.iat[i, j] = True
                 nested_matrix.iat[j, i] = True
 
-np.fill_diagonal(nested_matrix.values.copy(), True) # basins are nested with themselves
+np.fill_diagonal(nested_matrix.values, True) # basins are nested with themselves
 # ==========================================
 # 1. HYPERPARAMETERS & CONFIGURATION
 # ==========================================
@@ -1515,10 +1531,10 @@ pristine_pool = pristine_pool.sort_values(
 )
 
 pristine_pool.iloc[0:15][['name', 'geometry']].explore()
-# Mannually pick the test set
-for gage in pristine_pool.iloc[0:15].index:
-    df = pd.read_csv(os.path.join(appDir, f'{gage}.csv'), parse_dates=['date'], index_col='date')
-    plot_hydrograph(df, 'Q_cfs', gage)
+# # Mannually pick the test set
+# for gage in pristine_pool.iloc[0:15].index:
+#     df = pd.read_csv(os.path.join(appDir, f'{gage}.csv'), parse_dates=['date'], index_col='date')
+#     plot_hydrograph(df, 'Q_cfs', gage)
 
 test_gages = [
     '09266500', 
@@ -1529,7 +1545,7 @@ test_gages = [
     '09253000', 
     '383926107593001', 
     '09123450', 
-    '09306255', 
+    '09217900',
     '09081600']
 
 test_set = rdf[rdf.index.isin(test_gages)].copy()
@@ -1537,7 +1553,7 @@ target_mean_area = test_set['area_km2'].mean()
 
 print(f"=== TEST SET SELECTED ({len(test_set)} gages) ===")
 print(f"Mean Area: {target_mean_area:.2f} km²")
-print(f"Mean Nesting Degree: {test_set['nesting_degree'].mean():.1f} connections")
+print(test_set['name'])
 
 # ==========================================
 # 4. EXCLUDE TEST GAGES & ALL NESTED RELATIVES
@@ -1577,9 +1593,15 @@ def calc_distance(df1, df2):
 # ==========================================
 training_sets = {}
 
+# add 5 of the testing gages back to every training set.
+five_unseen = ['09081600', '09266500', '09253000', '09312600', '09223000']
+five_seen = list(set(test_gages) - set(five_unseen))
+five_seen_df = test_set[test_set.index.isin(five_seen)]
+
 # Set 0: Purely pristine starting baseline
 current_gages = pristine_pool_rm.index.tolist()
 train_df = rdf[rdf.index.isin(current_gages)].copy()
+train_df = pd.concat([train_df, five_seen_df]) # add 5 back
 train_df['set'] = 0
 training_sets['train_set_0'] = train_df
 
@@ -1649,6 +1671,7 @@ for step in range(1, NUM_STEPS + 1):
 
     # Store resulting training set
     train_df = rdf[rdf.index.isin(current_gages)].copy()
+    train_df = pd.concat([train_df, five_seen_df]) # add 5 back
     train_df['set'] = step
     training_sets[f'train_set_{step}'] = train_df
     
@@ -1670,7 +1693,12 @@ set10[['name', 'geometry']].explore()
 # PREP NH
 ################
 import yaml
+import pickle
+
+# define paths
 ccwd = r'/content/drive/MyDrive/natural_streamflow_colab' # how to write file paths so Collab can read them
+pcwd = r'G:\My Drive\natural_streamflow_colab\configs\pickles' # where to save the pickles
+
 # 1. Save test_set.txt (list of gage IDs separated by line breaks)
 test_set_path = os.path.join(gcwd, 'configs', 'test_set.txt')
 with open(test_set_path, 'w') as f:
@@ -1703,7 +1731,52 @@ for i in range(11):
     config_data['train_basin_file'] = train_set_gpath
     config_data['test_basin_file'] = test_set_gpath
 
+    # add the per basin train periods
+    trainpb = {}
+    testpb = {}
+    train_sd = pd.to_datetime(config_data['train_start_date'], dayfirst=True)
+    train_ed = pd.to_datetime(config_data['train_end_date'], dayfirst=True)
+    test_sd = pd.to_datetime(config_data['test_start_date'], dayfirst=True)
+    test_ed = pd.to_datetime(config_data['test_end_date'], dayfirst=True)
+
+    for gage in tset.index.to_list() + test_gages:
+        if gage not in test_gages:
+            # train these on all dates
+            trainpb[gage] = {'start_dates': [train_sd], 'end_dates':[train_ed]}
+        elif gage in five_seen:
+            # train these gages on just half their period of record, test on the other half
+            fd = test_set[test_set.index==gage]['firstday'].iloc[0]
+            ld = test_set[test_set.index==gage]['lastday'].iloc[0]
+            midpoint = fd + (ld - fd) / 2
+            midpoint = midpoint.normalize()
+            one_day_after = midpoint + pd.Timedelta(days=1)
+
+            trainpb[gage] = {'start_dates': [train_sd], 'end_dates':[midpoint]}
+            testpb[gage] = {'start_dates': [one_day_after], 'end_dates':[test_ed]}
+        elif gage in five_unseen:
+            testpb[gage] = {'start_dates': [test_sd], 'end_dates':[test_ed]}
+    
+    test_pickle_path = os.path.join(pcwd, f'test_{i}.pkl')
+    test_pickle_gpath = f'{ccwd}/configs/pickles/test_{i}.pkl'
+    train_pickle_path = os.path.join(pcwd, f'train_{i}.pkl')
+    train_pickle_gpath = f'{ccwd}/configs/pickles/train_{i}.pkl'
+
+    # save files
+    with open(test_pickle_path, "wb") as f:
+        pickle.dump(testpb, f)
+    with open(train_pickle_path, "wb") as f:
+        pickle.dump(trainpb, f)
+    
+    config_data['per_basin_test_periods_file'] = test_pickle_gpath
+    config_data['per_basin_train_periods_file'] = train_pickle_gpath
+
+    # delete global start and end dates
+    for date in ['train_start_date', 'train_end_date', 'test_start_date', 'test_end_date']:
+        del config_data[date]
+
     # Save modified configuration to new YAML file
     config_path = os.path.join(gcwd, 'configs', f'config_{key}.yml')
     with open(config_path, 'w') as f:
         yaml.safe_dump(config_data, f, default_flow_style=False)
+
+    stop

@@ -28,8 +28,9 @@ center_lat = (miny + maxy) / 2
 center_lon = (minx + maxx) / 2
 bounds = [[miny, minx], [maxy, maxx]]
 
-# Track the selected gage reactively
+# Track the selected gage reactively and search status
 selected_gage = reactive.Value(None)
+search_error_msg = reactive.Value("")
 
 # 2. Setup Page Layout
 ui.page_opts(title="Upper Colorado River Basin Naturalized Streamflow", fillable=True)
@@ -40,90 +41,144 @@ with ui.layout_column_wrap(width=1/2):
     with ui.card():
         ui.card_header("USGS Streamflow Gages and Watersheds")
 
-        @render_widget
-        def map():
-            osm_layer = L.basemap_to_tiles(L.basemaps.OpenStreetMap.Mapnik)
-            osm_layer.name = "Open Street Maps"
+        # Top-left search controls
+        ui.p("Select a gage or enter USGS gage ID here:", style="margin-bottom: 5px; font-weight: 500;")
+        with ui.div(style="display: flex; gap: 10px; align-items: center; margin-bottom: 5px;"):
+            ui.input_text("gage_search_id", None, placeholder="e.g. 09010500")
+            ui.input_action_button("btn_search_gage", "See data")
 
-            ucol_layer = L.GeoData(
-                geo_dataframe=ucol,
-                style={"color": "black", "opacity": 1, "weight": 2, "fillOpacity": 0.0, "fillColor": "black", 'interactive':False},
-                interactive=False,
-                name="Upper Colorado River Basin",
-            )
+        @render.text
+        def search_error():
+            err = search_error_msg.get()
+            return err if err else ""
 
-            gages_layer = L.GeoData(
-                geo_dataframe=gages,
-                point_style={"radius": 4, "color": "blue", "fillColor": "grey", "fillOpacity": 0.5, "weight": 1},
-                name="Streamflow Gages",
-            )
+        # Initialize Base Map
+        m = L.Map(center=(center_lat, center_lon), zoom=10, scroll_wheel_zoom=True)
+        osm_layer = L.basemap_to_tiles(L.basemaps.OpenStreetMap.Mapnik)
+        osm_layer.name = "Open Street Maps"
 
-            m = L.Map(center=(center_lat, center_lon), zoom=10, layers=[gages_layer, ucol_layer, osm_layer], scroll_wheel_zoom=True)
+        ucol_layer = L.GeoData(
+            geo_dataframe=ucol,
+            style={"color": "black", "opacity": 1, "weight": 2, "fillOpacity": 0.0, "fillColor": "black", 'interactive': False},
+            interactive=False,
+            name="Upper Colorado River Basin",
+        )
 
-            # 1. Create a single, reusable HTML widget and Popup container
-            popup_html = widgets.HTML()
-            map_popup = L.Popup(
+        gages_layer = L.GeoData(
+            geo_dataframe=gages,
+            point_style={"radius": 4, "color": "blue", "fillColor": "grey", "fillOpacity": 0.5, "weight": 1},
+            name="Streamflow Gages",
+        )
+
+        m.add_layer(osm_layer)
+        m.add_layer(gages_layer)
+        m.add_layer(ucol_layer)
+
+        control = L.LayersControl(position="topright")
+        m.add_control(control)
+        m.fit_bounds(bounds)
+
+        # Centralized Selection Handler (Map click & Text input)
+        def select_gage_by_id(gage_id):
+            gage_str = str(gage_id).strip()
+            match = gages[gages['gage'].astype(str).str.strip() == gage_str]
+            
+            if match.empty:
+                search_error_msg.set("invalid gage ID")
+                return False
+
+            search_error_msg.set("")
+            row = match.iloc[0]
+            gage = row['gage']
+            name = row['name']
+            lat, lon = row.geometry.y, row.geometry.x
+
+            selected_gage.set({"gage": gage, "name": name})
+
+            # Clear existing Watershed, Diversions, and Popup layers
+            for layer in list(m.layers):
+                if layer.name in ["Active Watershed", "Diversions"] or isinstance(layer, L.Popup):
+                    m.remove_layer(layer)
+
+            # Watershed Handling
+            selected_basin_df = basins[basins['gage'] == gage]
+            if not selected_basin_df.empty:
+                watershed_layer = L.GeoData(
+                    geo_dataframe=selected_basin_df,
+                    style={"color": "blue", "weight": 2, "fillColor": "lightblue", "fillOpacity": 0.25, 'interactive': False},
+                    interactive=False,
+                    name="Active Watershed"
+                )
+                m.add_layer(watershed_layer)
+
+                # Diversions Handling
+                selected_dvrs = gpd.clip(dvrs, selected_basin_df)
+                if not selected_dvrs.empty:
+                    selected_dvrs = selected_dvrs.copy()
+                    selected_dvrs['fillColor'] = selected_dvrs['siteUse'].map(CU_COLORS).fillna('#666666')
+                    selected_dvrs['color'] = selected_dvrs['fillColor']
+                    selected_dvrs['radius'] = 4
+                    selected_dvrs['fillOpacity'] = 0.7
+                    selected_dvrs['weight'] = 1
+
+                    diversions_layer = L.GeoData(
+                        geo_dataframe=selected_dvrs,
+                        point_style={"type": "circle"}, 
+                        style={"radius": 4, "fillOpacity": 0.2, "weight": 1, "color": "#666666"},
+                        name="Diversions"
+                    )
+
+                    # Hover event for Diversion Points (siteName Popup)
+                    dvr_hover_popup = L.Popup(child=widgets.HTML(), close_button=False, auto_close=False)
+
+                    def dvr_hover(event=None, feature=None, **kwargs):
+                        if feature and 'properties' in feature:
+                            site_name = feature['properties'].get('siteName', 'N/A')
+                            coords = feature.get('geometry', {}).get('coordinates', [])
+                            if event == 'mouseover' and len(coords) >= 2:
+                                dvr_hover_popup.location = [coords[1], coords[0]]
+                                dvr_hover_popup.child.value = f"<div style='font-size:11px; padding:2px;'><b>{site_name}</b></div>"
+                                if dvr_hover_popup not in m.layers:
+                                    m.add_layer(dvr_hover_popup)
+                            elif event == 'mouseout':
+                                if dvr_hover_popup in m.layers:
+                                    m.remove_layer(dvr_hover_popup)
+
+                    diversions_layer.on_hover(dvr_hover)
+                    m.add_layer(diversions_layer)
+
+            # Create fresh Popup for selected gage location (Fixes location bug)
+            popup_html = widgets.HTML(value=f"<b>{name}<br>USGS-{gage}</b><br>")
+            new_popup = L.Popup(
+                location=[lat, lon],
                 child=popup_html,
-                close_button=True, 
-                auto_close=True, 
+                close_button=True,
+                auto_close=True,
                 close_on_escape_key=True
             )
+            m.add_layer(new_popup)
+            m.center = (lat, lon)
+            return True
 
-            def gage_click(event=None, feature=None, id=None, **kwargs):
-                properties = feature.get('properties', {})
-                name = properties['name']
-                gage = properties['gage']
-                
-                selected_gage.set({"gage": gage, "name": name})
-                
-                # --- DYNAMIC WATERSHED & DIVERSIONS HANDLING ---
-                for layer in list(m.layers):
-                    if layer.name in ["Active Watershed", "Diversions"]:
-                        m.remove_layer(layer)
-                
-                selected_basin_df = basins[basins['gage'] == gage]
-                
-                if not selected_basin_df.empty:
-                    watershed_layer = L.GeoData(
-                        geo_dataframe=selected_basin_df,
-                        style={"color": "blue", "weight": 2, "fillColor": "lightblue", "fillOpacity": 0.25, 'interactive':False},
-                        interactive=False,
-                        name="Active Watershed"
-                    )
-                    m.add_layer(watershed_layer)
+        # Map Click Event Handler
+        def gage_click(event=None, feature=None, id=None, **kwargs):
+            if feature and 'properties' in feature:
+                gage = feature['properties'].get('gage')
+                if gage:
+                    select_gage_by_id(gage)
 
-                    selected_dvrs = gpd.clip(dvrs, selected_basin_df)
-                    if not selected_dvrs.empty:
-                        selected_dvrs['fillColor'] = selected_dvrs['siteUse'].map(CU_COLORS).fillna('#666666')
-                        selected_dvrs['color'] = selected_dvrs['fillColor']
-                        selected_dvrs['radius'] = 4
-                        selected_dvrs['fillOpacity'] = 0.7
-                        selected_dvrs['weight'] = 1
+        gages_layer.on_click(gage_click)
 
-                        diversions_layer = L.GeoData(
-                            geo_dataframe=selected_dvrs,
-                            point_style={"type": "circle"}, 
-                            style={"radius": 4, "fillOpacity": 0.2, "weight": 1, "color":"#666666"},
-                            name="Diversions"
-                        )
-                        m.add_layer(diversions_layer)
-                # -----------------------------------------------------------
-                
-                # 2. Update the persistent popup instead of creating a new one
-                coords = feature['geometry']['coordinates']
-                
-                popup_html.value = f"<b>{name}<br>USGS-{gage}</b><br>"
-                map_popup.location = [coords[1], coords[0]]
-                
-                # If the popup isn't already on the map, add it
-                if map_popup not in m.layers:
-                    m.add(map_popup)
+        # Search Button Reactive Observer
+        @reactive.effect
+        @reactive.event(input.btn_search_gage)
+        def _():
+            gage_id = input.gage_search_id()
+            if gage_id:
+                select_gage_by_id(gage_id)
 
-            gages_layer.on_click(gage_click)
-            control = L.LayersControl(position="topright")
-            m.add_control(control)
-            
-            m.fit_bounds(bounds)
+        @render_widget
+        def map():
             return m
 
     # RIGHT PANEL: Date, Units, Plot & Export
