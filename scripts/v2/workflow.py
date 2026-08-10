@@ -1,8 +1,5 @@
 import geopandas as gpd
-import rioxarray
-from pathlib import Path
 import os
-from os.path import join
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,8 +10,6 @@ nldi = NLDI()
 from pygeohydro import NWIS
 nwis = NWIS()
 from shapely.geometry import MultiPolygon, Polygon
-import re
-from pysheds.grid import Grid
 from shapely.geometry import shape
 from rasterstats import zonal_stats
 import rasterio
@@ -273,7 +268,7 @@ def prepare_dem_inputs(raw_dem_path, output_folder):
     print("Pre-processing complete.")
     return filled_path, fdir_path, acc_path
 
-def delineate_watersheds_preprocessed(fdir_path, acc_path, points_gdf, gage_col='gage', snap_threshold=1000):
+def delineate_watersheds_preprocessed(fdir_path, acc_path, x, y, gage, snap_threshold=1000):
     """
     Delineates watersheds using pre-calculated flow direction and accumulation rasters.
     
@@ -306,40 +301,31 @@ def delineate_watersheds_preprocessed(fdir_path, acc_path, points_gdf, gage_col=
     # Ensure points match the raster coordinate system
     dem_crs = grid.crs
     if points_gdf.crs != dem_crs:
-        print(f"Reprojecting points to match raster CRS: {dem_crs}")
-        points_gdf = points_gdf.to_crs(dem_crs)
+        raise Exception(f"Reproject points to match raster CRS: {dem_crs}")
         
     watershed_records = []
     print(f"Delineating {len(points_gdf)} watersheds from pre-processed surfaces...")
     
-    for idx, row in points_gdf.iterrows():
-        gage_id = row[gage_col]
-        geom = row.geometry
-        x, y = geom.x, geom.y
-        
-        try:
-            # Snap point to high-accumulation channel flow path
-            x_snap, y_snap = grid.snap_to_mask(acc > snap_threshold, (x, y))
-            
-            # Extract catchment array
-            catchment = grid.catchment(x=x_snap, y=y_snap, fdir=fdir, dirmap=dirmap, xytype='coordinate')
-            catchment = catchment.astype(np.int32)
-            
-            # Vectorize boundary arrays into shapely geometry shapes
-            shapes_generator = grid.polygonize(catchment)
-            polygons = [shape(s) for s, val in shapes_generator if val > 0]
-            
-            if polygons:
-                combined_polygon = polygons[0] if len(polygons) == 1 else polygons[0].union(polygons[1:])
-                watershed_records.append({
-                    gage_col: gage_id,
-                    'geometry': combined_polygon
-                })
-            else:
-                print(f"Warning: No polygon generated for gage {gage_id}")
-                
-        except Exception as e:
-            print(f"Failed to delineate gage {gage_id}: {e}")
+    x_snap, y_snap = grid.snap_to_mask(acc > snap_threshold, (x, y))
+    
+    # Extract catchment array
+    catchment = grid.catchment(x=x_snap, y=y_snap, fdir=fdir, dirmap=dirmap, xytype='coordinate')
+    catchment = catchment.astype(np.int32)
+    
+    # Vectorize boundary arrays into shapely geometry shapes
+    shapes_generator = grid.polygonize(catchment)
+    polygons = [shape(s) for s, val in shapes_generator if val > 0]
+    
+    if polygons:
+        combined_polygon = polygons[0] if len(polygons) == 1 else polygons[0].union(polygons[1:])
+        watershed_records.append({
+            gage_col: gage_id,
+            'geometry': combined_polygon
+        })
+    else:
+        print(f"Warning: No polygon generated for gage {gage_id}")
+    
+    print(f"Failed to delineate gage {gage_id}: {e}")
             
     # Build final GeoDataFrame output
     #result_gdf = gpd.GeoDataFrame(watershed_records, crs=dem_crs)
@@ -568,15 +554,15 @@ def remove_polygon_holes(geometry):
 ################## STEP 1 #####################
 
 # This step searchs the Ucol watershed for USGS gages and finds point locations
-skip = True
+skip = False
 if not skip:
     ucol_gage = '09380000'
     ucol = nldi.get_basins(ucol_gage)['geometry'].iloc[0]
     ucol_geom = remove_polygon_holes(ucol)
     ucol = gpd.GeoDataFrame(geometry=[ucol_geom], crs=4326)
     ucol.to_file(os.path.join(ncwd, r'spatial_data\UCOL.shp'))
-    ucol.to_parquet(os.path.join(ncwd, r'spatial_data\UCOL.parquet'))
-    ucol.to_parquet(os.path.join(appcwd, r'spatial_data\UCOL.parquet'))
+    # ucol.to_parquet(os.path.join(ncwd, r'spatial_data\UCOL.parquet'))
+    # ucol.to_parquet(os.path.join(appcwd, r'spatial_data\UCOL.parquet'))
 
     tiles = make_tiles(ucol, n_tiles_x=3, n_tiles_y=3)
     print(f"Querying NWIS across {len(tiles)} tiles…")
@@ -624,37 +610,37 @@ if not skip:
 
     ###################### STEP 2: Delineate watersheds from NLDI #####################
 
-    nldi  = NLDI()
-    basins_list = []
-    for id in gages['gage'].to_list():
-        try:
-            basin = nldi.get_basins(id) # watershed polygons
-            basins_list.append(basin)
-        except:
-            print(gages[gages.gage==id]['name'])
-            continue
-    # the polygons
-    basins = pd.concat(basins_list)
-    basins['gage'] = basins.index
-    basins['gage'] = basins['gage'].apply(fix_gage_id)
+    # nldi  = NLDI()
+    # basins_list = []
+    # for id in gages['gage'].to_list():
+    #     try:
+    #         basin = nldi.get_basins(id) # watershed polygons
+    #         basins_list.append(basin)
+    #     except:
+    #         print(gages[gages.gage==id]['name'])
+    #         continue
+    # # the polygons
+    # basins = pd.concat(basins_list)
+    # basins['gage'] = basins.index
+    # basins['gage'] = basins['gage'].apply(fix_gage_id)
 
-    # NLDI didn't get:
-    mdl = gages[~gages['gage'].isin(basins.gage)]
-    print(len(mdl))
+    # # NLDI didn't get:
+    # mdl = gages[~gages['gage'].isin(basins.gage)]
+    # print(len(mdl))
 
-    # read these we already delineated
-    man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
-    man_delin = pd.merge(left=man_delin, right=gages[['name','gage']], on='gage', how='left').dropna()
+    # # read these we already delineated
+    # man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin.shp'))
+    # man_delin = pd.merge(left=man_delin, right=gages[['name','gage']], on='gage', how='left').dropna()
 
-    # Now join the manually delineated ones to the basins list
-    man_delin = man_delin.set_geometry('geometry')
-    man_delin = man_delin.set_crs(4326)
-    basins = pd.merge(left=basins, right=gages[['name','gage']], on='gage', how='left')
-    basins = pd.concat([basins, man_delin])
+    # # Now join the manually delineated ones to the basins list
+    # man_delin = man_delin.set_geometry('geometry')
+    # man_delin = man_delin.set_crs(4326)
+    # basins = pd.merge(left=basins, right=gages[['name','gage']], on='gage', how='left')
+    # basins = pd.concat([basins, man_delin])
 
-    # check if we already did these
-    mdl = mdl[~mdl.gage.isin(man_delin.gage)]
-    print(len(mdl), mdl.gage.unique())
+    # # check if we already did these
+    # mdl = mdl[~mdl.gage.isin(man_delin.gage)]
+    # print(len(mdl), mdl.gage.unique())
 
     #############################################################################
     # GET STREAMFLOW AND MERGE DIVERSION DATA
@@ -701,60 +687,142 @@ if not skip:
         sub_df = sub_df.set_index('time')
         flow[gage] = sub_df[gage] * 0.0283168 # convert to cms
 
+
+    # use the NLDI gages to approximate basin boundaries
+    # (if its not in here, we don't want it)
+    old_basins_path = os.path.join(appcwd, r'spatial_data\v1\all_UCOL_basins.parquet')
+    basins = gpd.read_parquet(old_basins_path).to_crs(5070)
+    keep = []
+    keep = keep + basins.gage.to_list()
+    
+    # check for ones with streamflow for the app
+    has_flow = []
+    for gage in flow.columns:
+        if flow[gage].notna().sum() >= 365:
+            has_flow.append(gage)
+    
+    # remove other ones
+    keep = set(keep).intersection(set(has_flow))
+    gages = gages[gages['gage'].isin(keep)]
+    basins = basins[basins['gage'].isin(gages.gage.to_list())]
+
+    # delineate basins
+    terrain_folder = os.path.join(ncwd, r'data\terrain')
+    southDEM = os.path.join(terrain_folder, r'dem_ucol_south\south5070.tif')
+    northDEM = os.path.join(terrain_folder, r'dem_ucol_north\north5070.tif')
+    bigDEM = os.path.join(terrain_folder, r'dem_ucol_big\big5070.tif')
+    dems = [southDEM, northDEM, bigDEM]
+
+    # # grab bounding box of dems
+    from shapely.geometry import box
+    dem_geoms = {}
+    for dem in dems:
+        with rasterio.open(dem) as src:
+            bounds = src.bounds  # Returns (left, bottom, right, top)
+            crs = src.crs        # Coordinate Reference System
+            geom = box(*bounds)
+            dem_geoms[dem] = geom
+
+    # 1. Create a GeoDataFrame for DEM bounding extents
+    dem_gdf = gpd.GeoDataFrame(
+        {"dem_name": ["south", "north"]},
+        geometry=[dem_geoms[southDEM], dem_geoms[northDEM]],
+        crs=5070,  # Set original CRS of DEMs
+    ).to_crs(5070)
+
+    # 2. Perform a spatial join checking containment
+    joined = gpd.sjoin(
+        basins.to_crs(5070), dem_gdf, how="left", predicate="within"
+    )
+
+    # drop ones that cover both
+    joined = (
+    joined.assign(_is_north=joined['dem_name'] == 'north')
+    .sort_values(by='_is_north', ascending=False)
+    .drop_duplicates(subset=['gage'], keep='first')
+    .drop(columns=['_is_north'])
+    )
+
+    # 3. Map results back with fallback to 'big'
+    joined = joined.set_index('gage').sort_index().to_crs(5070)
+    basins = basins.set_index('gage').sort_index().to_crs(5070)
+    gages = gages.set_index('gage').sort_index().to_crs(5070)
+    basins["dem"] = joined["dem_name"].fillna("big50")
+    gages["dem"] = joined["dem_name"].fillna("big50")
+
+    print('lees ferry is', gages[gages.index=='09380000']['dem'], 'keystone is:', gages[gages.index=='09047700']['dem'])
+
+    import whitebox
+    wbt = whitebox.WhiteboxTools()
+
+    cats = []
+    snap_threshold = 1000
+    direction ='big50'
+    directions = ['big50', 'north', 'south']
+    for direction in directions:
+        # filter to just this direction
+        if not os.path.exists(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp')):
+            print(f'starting {direction}')
+            sub_gages = gages[gages['dem']==direction]
+            print(f'doing {len(sub_gages)} gages for {direction}')
+            # save as shp
+            sg_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\pre_snap.shp')
+            sub_gages.to_file(sg_path)
+            # create filled, flow dir, and flow acc
+            dem_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\{direction}5070.tif')
+            print('filling DEM')
+            filled_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\filled_dem.tif')
+            filled_dem = wbt.fill_depressions(dem_path, output=filled_path, flat_increment=0.001)
+            print('flow direction')
+            flow_dir_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\flow_direction.tif')
+            wbt.d8_pointer(filled_path, output=flow_dir_path)
+            print('flow accumulation')
+            flow_acc_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\flow_accum.tif')
+            wbt.d8_flow_accumulation(filled_path, output=flow_acc_path, out_type='cells')
+            print('extract streams')
+            streams_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\streams.tif')
+            wbt.extract_streams(flow_accum=flow_acc_path, output=streams_path,threshold=2000.0)
+            print('snapping pour points')
+            pp_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\snapped.shp')
+            wbt.jenson_snap_pour_points(pour_pts=sg_path, streams=streams_path, output=pp_path, snap_dist=100.0)
+            pp = gpd.read_file(pp_path)
+            # pp = pp[['gage', 'geometry']]
+            # pp.to_file(pp_path)
+            print('wshed delineation')
+            wshed_raster_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\wshed_raster.tif')
+            wbt.unnest_basins(d8_pntr=flow_dir_path, pour_pts=pp_path, output=wshed_raster_path)
+        
+            vector_cats = []
+            for i in range(1,18):
+                path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\wshed_raster_{i}.tif')
+                outpath = os.path.join(terrain_folder, fr'dem_ucol_{direction}\wshed_vector_{i}.shp')
+                if not os.path.exists(outpath):
+                    v = wbt.raster_to_vector_polygons(path, output=outpath)
+                cats = gpd.read_file(outpath)
+                vector_cats.append(cats)
+
+                # align value with the gage ID
+                cats = pd.concat(vector_cats)
+                cats['VALUE'] = cats['VALUE'].astype(int)
+                cats = cats.set_index('VALUE')
+                pp_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\snapped.shp')
+                pp = gpd.read_file(pp_path)
+                pp['VALUE'] = pp.index + 1
+                pp = pp.set_index('VALUE')
+
+                basins = pd.merge(left=cats, right=pp[['gage']], left_index=True, right_index=True)
+                basins.geometry = basins.geometry.to_crs(5070)
+                basins['geometry'] = basins.geometry.simplify(tolerance=100)
+                basins.to_file(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp'))
+
     # get basin area
-    basins.geometry = basins.geometry.to_crs(5070)
     basins['area_m2'] = basins.area
 
     # save all the basins and gages
     print(f'{len(basins)} basins, {len(gages)} gages')
-
-    # check for ones with streamflow for the app
-    keep = []
-    for gage in flow.columns:
-        if flow[gage].notna().sum() >= 365:
-            keep.append(gage)
-
-    basins = basins[basins['gage'].isin(keep)]
-    gages = gages[gages['gage'].isin(keep)]
-    print(f'{len(basins)} basins, {len(gages)} gages')
     print('basins with no gage:', set(basins.gage).difference(set(gages.gage)))
     need_basin = set(gages.gage).difference(set(basins.gage))
     print('gages with no basin:', set(gages.gage).difference(set(basins.gage))) # should be none
-
-    dem_path = os.path.join(ncwd, r'data\terrain\dem_ucol_south\output_USGS30m.tif')
-    terrain_folder = os.path.join(ncwd, r'data\terrain\dem_ucol_south')
-
-    # Run the raw data once and save the states
-    filled_path = os.path.join(terrain_folder, r'dem_filled.tif')
-    acc_path = os.path.join(terrain_folder, r'flow_accumulation.tif')
-    fdir_path = os.path.join(terrain_folder, r'flow_direction.tif')
-
-    if not os.path.exists(acc_path):
-        filled_path, fdir_path, acc_path = prepare_dem_inputs(
-            raw_dem_path=dem_path, 
-            output_folder=terrain_folder
-        )
-
-    need_basin = gages[gages.gage.isin(need_basin)]
-
-    # delineate
-    # watershed_polygons_gdf = delineate_watersheds_preprocessed(
-    #     fdir_path=fdir_path,
-    #     acc_path=acc_path,
-    #     points_gdf=need_basin,
-    #     gage_col='gage'
-    # )
-    # man_delin = gpd.GeoDataFrame().from_dict(watershed_polygons_gdf)
-    # man_delin.geometry.crs = 4326
-    # man_delin = pd.merge(left=man_delin, right=gages[['gage', 'name']], on='gage', how='left')
-    #man_delin.to_file(os.path.join(ncwd, r'data/shapefiles/man_delin2.shp'))
-    man_delin = gpd.read_file(os.path.join(ncwd, r'data/shapefiles/man_delin2.shp'))
-
-    # add to basins...
-    basins = basins.to_crs(4326)
-    print(len(basins))
-    basins = pd.concat([basins, man_delin])
-    print(len(basins))
 
     # remove holes from geometry:
     # Fill holes by re-constructing Polygons using only their exterior boundary
@@ -776,39 +844,199 @@ if not skip:
     # Apply to the GeoDataFrame
     basins["geometry"] = basins["geometry"].apply(remove_holes_and_force_polygon)
 
-    # add area m2
-    basins.geometry = basins.geometry.to_crs(9822)
-    basins['area_m2'] = basins.area
+    # add area km2
     basins['area_km2'] = basins['area_m2'] / 1000000
+
+    # force gage index
+    basins = basins.set_index('gage')
+    gages = gages.set_index('gage')
+
+    # drop FID
+    basins = basins.drop(columns=['FID'])
+    
+    # add name
+    basins['name'] = gages.name
+
+    # some of the manual delineations might be broken
+    old_basins = gpd.read_parquet(old_basins_path)
+    old_basins.set_index('gage', inplace=True)
+    broken_basins = ['09019000', '09050700']
+
+    for gage in basins.index:
+        try:
+            new_area = basins[basins.index==gage]['area_m2'].iloc[0]
+            old_area = old_basins[old_basins.index==gage]['area_m2'].iloc[0]
+            area_frac = new_area/old_area
+            if area_frac > 1.2 or area_frac < 0.8:
+                print(gage, f'{area_frac:.2f}')
+        except:
+            continue
 
     # Enforce that they are the same
     basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
     gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 
-    basins = basins.sort_values(by='gage').reset_index(drop=True)
-    gages = gages.sort_values(by='gage').reset_index(drop=True)
-    if all(basins.gage == gages.gage):
+    basins = basins.sort_index()
+    gages = gages.sort_index()
+
+    if all(basins.index == gages.index):
         basins.to_parquet(basins_path)
         gages.to_parquet(gages_path)
-        basins.to_parquet(os.path.join(ncwd, r'spatial_data/all_UCOL_basins.parquet'))
-        gages.to_parquet(os.path.join(ncwd, r'spatial_data/all_UCOL_gages.parquet'))
+        print(f'saved to {basins_path} and {gages_path}')
+        lees_ferry = basins[basins.index=='09380000']
+        lees_ferry.to_parquet(os.path.join(appcwd, r'spatial_data/UCOL.parquet'))
+        #basins.to_parquet(os.path.join(ncwd, r'spatial_data/all_UCOL_basins.parquet'))
+        #gages.to_parquet(os.path.join(ncwd, r'spatial_data/all_UCOL_gages.parquet'))
 
-    basins[basins.gage==ucol_gage].explore()
-    # DIVERSIONS
-    # COLUMN = siteID
-
-############# CONSIDER MANUALLY DELINEATING ALL OF THEM #########################
+#### GRAB CLIMATE FORCING ####
+basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
 gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
-watershed_polygons_gdf = delineate_watersheds_preprocessed(
-        fdir_path=fdir_path,
-        acc_path=acc_path,
-        points_gdf=need_basin,
-        gage_col='gage'
-    )
-man_delin = gpd.GeoDataFrame().from_dict(watershed_polygons_gdf)
-man_delin.geometry.crs = 4326
-man_delin = pd.merge(left=man_delin, right=gages[['gage', 'name']], on='gage', how='left')
-man_delin.to_file(os.path.join(ncwd, r'data/shapefiles/man_delin2.shp'))
+basins = gpd.read_parquet(basins_path)
+gages = gpd.read_parquet(gages_path)
+
+import pygridmet as gridmet
+import rioxarray
+from shapely.geometry import mapping
+
+# smaller date range for this
+date_range = ("2003-10-01", "2025-09-30")
+
+# Variables requested from GRIDMET service
+variables = ['pr', 'srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd', 'pet']
+
+# Define aggregation types per variable
+mean_vars = ['srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd']
+sum_vars = ['pet', 'pr']
+
+# Run the SNODAS extraction ONCE up front
+#############
+gages_done = []
+for fol in [1,2]:
+    snodas_export_folder = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed{fol}'
+    df = pd.read_csv(os.path.join(snodas_export_folder, 'SNODAS_SWE_WY2025.csv'))
+    gages_done = gages_done + df.columns.to_list()
+        
+snodas_folder = r"N:\Research\Kampf\Private\KeenanW\SNODAS"
+snodas_export_folder = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed3'
+#extract_all_snodas(basins2do, date_range, snodas_folder, snodas_export_folder, 'gage')
+
+snodas_dfs = []
+years = list(range(pd.to_datetime(date_range[0]).year+1, pd.to_datetime(date_range[1]).year + 1))
+
+for fol in [1,2,3]:
+    snodas_export_folder = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed{fol}'
+    for year in years:
+        snodas_dfs.append(pd.read_csv(os.path.join(snodas_export_folder, f'SNODAS_SWE_WY{year}.csv')))
+
+snodas_lookup = pd.concat(snodas_dfs)
+snodas_lookup['date'] = pd.to_datetime(snodas_lookup['date'])
+snodas_lookup = snodas_lookup.set_index('date')
+snodas_lookup = snodas_lookup.sort_values(by='date')
+
+basins = basins.to_crs(4326)
+# prepare rename dict
+rename_dict = {v: f"{v}_mean" for v in mean_vars}
+rename_dict['time'] = 'date'
+rename_dict.update({v: f"{v}_sum" for v in sum_vars})
+appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
+nodata = []
+# Loop over each individual watershed
+for gage in basins.gage:
+    #gage = '09303400'
+    outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_new\{gage}.csv'
+
+    # 2. Check for SNODAS data
+    try:
+        gage_swe_series = snodas_lookup[gage].dropna()
+        if gage_swe_series.empty or any(gage_swe_series.isna()):
+            raise Exception('no snow data')
+    except Exception as e:
+        print(f'no snodas for {gage}')
+        continue
+
+    # Isolate watershed geometry once
+    single_gdf = basins[basins.gage == gage]
+    name = single_gdf['name'].iloc[0]
+    areakm2 = single_gdf['area_km2'].iloc[0]
+
+    # 3. Generate gridMET file (outpath) if missing
+    if True: #not os.path.exists(outpath):
+        print(f"downloading gridmet: {gage}...")
+
+        if areakm2 < 10:
+            print(f"getting by coords {gage}")
+            try:
+                gr_df = gridmet.get_bycoords(
+                    coords=[single_gdf.geometry.iloc[0].centroid.x, single_gdf.geometry.iloc[0].centroid.y], 
+                    dates=date_range, 
+                    crs=single_gdf.crs, 
+                    variables=variables
+                )
+                gr_df.columns = gr_df.columns.str.split(' ').str[0]
+                gr_df = gr_df.rename(columns=rename_dict)
+
+                area_factor = areakm2 / 16
+                for var in ['pr', 'pet']:
+                    if f'{var}_sum' in gr_df.columns:
+                        gr_df[f'{var}_sum'] = gr_df[f'{var}_sum'] * area_factor
+
+                gr_df['swe'] = gage_swe_series
+                gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
+                gr_df['gridmet_method'] = 'coordinates'
+                gr_df.to_csv(outpath, index_label='date')
+            except Exception as e:
+                print(f"Failed getting coords for {gage}: {e}")
+                nodata.append({gage:e})
+
+        elif areakm2 < 25000:
+            print(f"area: {areakm2:.2f} km2")
+            try:
+                ds = gridmet.get_bygeom(geometry=single_gdf.geometry.iloc[0], dates=date_range, crs=single_gdf.crs, variables=variables)
+                ds_mean = ds[mean_vars].mean(dim=["lon", "lat"], skipna=True)
+                ds_sum = ds[sum_vars].sum(dim=["lon", "lat"], skipna=True)
+                df_mean = ds_mean.to_dataframe().reset_index()
+                df_sum = ds_sum.to_dataframe().reset_index()
+                gr_df = pd.merge(df_mean, df_sum, on='time')
+                gr_df = gr_df.rename(columns=rename_dict)
+                gr_df = gr_df.set_index('date', drop=True)
+                gr_df['swe'] = gage_swe_series
+                gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
+                gr_df['gridmet_method'] = 'geometry'
+                gr_df.to_csv(outpath, index_label='date')
+            except Exception as e:
+                print(f'{gage} error during get_bygeom: {e}')
+                if 'unable to allocate' not in str(e).lower():
+                    print(f"getting by coords fallback for {gage}")
+                    try:
+                        gr_df = gridmet.get_bycoords(
+                            coords=[single_gdf.geometry.iloc[0].centroid.x, single_gdf.geometry.iloc[0].centroid.y], 
+                            dates=date_range, 
+                            crs=single_gdf.crs, 
+                            variables=variables
+                        )
+                        gr_df.columns = gr_df.columns.str.split(' ').str[0]
+                        gr_df = gr_df.rename(columns=rename_dict)
+
+                        area_factor = areakm2 / 16
+                        for var in ['pr', 'pet']:
+                            if f'{var}_sum' in gr_df.columns:
+                                gr_df[f'{var}_sum'] = gr_df[f'{var}_sum'] * area_factor
+
+                        gr_df['swe'] = gage_swe_series
+                        if gr_df['swe'].isna().sum() == len(gr_df):
+                            fuck
+                        gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
+                        gr_df['gridmet_method'] = 'coordinates'
+                        gr_df.to_csv(outpath, index_label='date')
+                    except Exception as fallback_e:
+                        print(f"Fallback failed for {gage}: {fallback_e}")
+                else:
+                    print(f"{gage} {name} too big (memory allocation issue)")
+                    nodata.append({gage:e})
+        else:
+            print(f"{gage} {name} too big, didn't try")
+            nodata.append({gage:'too big'})
+
 
 skip2 = False
 if not skip2:
@@ -832,7 +1060,6 @@ if not skip2:
     name_dict = gages.set_index('gage')['name'].to_dict()
     date_range = ("1979-10-01", "2025-09-30")
     #####################
-
     dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
 
     # this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
@@ -847,11 +1074,12 @@ if not skip2:
     dvrs_intra['decLong'] = dvrs_intra['dest_decLong']
 
     dvrs_intra['siteID'] = dvrs_intra['siteID'].str.replace('intrabasin', 'transbasin')
+    dvrs_intra['siteName'] = dvrs_intra['siteName'] + '_delivery_point'
     # add rows for the transbasin
     dvrs = pd.concat([dvrs, dvrs_intra])
     # need to rebuild the geometry after this
     dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
-    #dvrs.to_file(os.path.join(ncwd, r"data\shapefiles\ucrb_diversion_master_table.gpkg"))
+    dvrs.to_parquet(os.path.join(appcwd, r"spatial_data\ucrb_diversion_master_table.parquet"))
 
     # WATERSHEDS
     # gageID column = gage
@@ -859,7 +1087,7 @@ if not skip2:
     # COLUMN HEADERS = siteID
 
     # 1980 to 2025
-    dvrsFlow = pd.read_csv(os.path.join(ncwd, "data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+    dvrsFlow = pd.read_csv(os.path.join(ncwd, r"data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
     dvrsFlow = dvrsFlow.rename(columns={'datetime':'date'})
     dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
     #dvrsFlow = pd.concat([dvrsFlow, dvrsFlow])
@@ -905,14 +1133,6 @@ if not skip2:
             df_cleaned = df[~df.index.duplicated(keep='first')]
             df_cleaned = df_cleaned.asfreq('D')
             df_cleaned.to_csv(out_path, index_label='date')
-
-            # Get the last modification time of the file
-            #file_mod_time = os.path.getmtime(out_path_small)
-            
-            # If the file was modified less than 24 hours ago, skip it
-            # if (current_time - file_mod_time) < seconds_in_1_hours:
-            #     print(f"Skipping {gage}.csv - updated within the last 24 hours.")
-            #     continue
 
         df = flow[[gage]]
         df = df.rename(columns={gage:'Q_cms'})
@@ -1041,166 +1261,6 @@ if not skip2:
 
         print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
 
-#### GRAB CLIMATE FORCING ####
-basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
-gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
-basins = gpd.read_parquet(basins_path)
-gages = gpd.read_parquet(gages_path)
-
-import pygridmet as gridmet
-import rioxarray
-from shapely.geometry import mapping
-
-# smaller date range for this
-date_range = ("2003-10-01", "2025-09-30")
-
-# Variables requested from GRIDMET service
-variables = ['pr', 'srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd', 'pet']
-
-# Define aggregation types per variable
-mean_vars = ['srad', 'rmax', 'rmin', 'tmmn', 'tmmx', 'vpd',]
-sum_vars = ['pet', 'pr']
-
-# Run the SNODAS extraction ONCE up front
-
-#############
-# You ran this for data\shapefiles\UCOL_headwaters_sheds.shp already. In snodas_processed
-#############
-gages_done = []
-for fol in [1,2]:
-    snodas_export_folder = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed{fol}'
-    df = pd.read_csv(os.path.join(snodas_export_folder, 'SNODAS_SWE_WY2025.csv'))
-    gages_done = gages_done + df.columns.to_list()
-        
-gages_done.remove('date')
-gages_done = set(gages_done)
-print(f'{len(gages_done)} with snodas')
-left2do = set(basins.gage).difference(gages_done)
-print(f'{len(left2do)} without snodas')
-
-basins2do = basins[basins.gage.isin(left2do)]
-
-snodas_folder = r"N:\Research\Kampf\Private\KeenanW\SNODAS"
-snodas_export_folder = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed3'
-#extract_all_snodas(basins2do, date_range, snodas_folder, snodas_export_folder, 'gage')
-
-snodas_dfs = []
-years = list(range(pd.to_datetime(date_range[0]).year+1, pd.to_datetime(date_range[1]).year + 1))
-
-for fol in [1,2,3]:
-    snodas_export_folder = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\snodas_processed{fol}'
-    for year in years:
-        snodas_dfs.append(pd.read_csv(os.path.join(snodas_export_folder, f'SNODAS_SWE_WY{year}.csv')))
-
-snodas_lookup = pd.concat(snodas_dfs)
-snodas_lookup['date'] = pd.to_datetime(snodas_lookup['date'])
-snodas_lookup = snodas_lookup.set_index('date')
-snodas_lookup = snodas_lookup.sort_values(by='date')
-
-# add area km2
-basins = basins.to_crs(4326)
-# prepare rename dict
-rename_dict = {v: f"{v}_mean" for v in mean_vars}
-rename_dict['time'] = 'date'
-rename_dict.update({v: f"{v}_sum" for v in sum_vars})
-appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
-nodata = []
-# Loop over each individual watershed
-for gage in basins.gage:
-    #gage = '09303400'
-    outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
-    outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow7\{gage}.csv'
-
-    # 1. Skip if both files already exist
-    # if os.path.exists(outpath) and os.path.exists(outpath2):
-    #     print(f'{gage} already done')
-    #     continue
-
-    # 2. Check for SNODAS data
-    try:
-        gage_swe_series = snodas_lookup[gage].dropna()
-        if gage_swe_series.empty or any(gage_swe_series.isna()):
-            raise Exception('no snow data')
-    except Exception as e:
-        print(f'no snodas for {gage}')
-        continue
-
-    # Isolate watershed geometry once
-    single_gdf = basins[basins.gage == gage]
-    name = single_gdf['name'].iloc[0]
-    areakm2 = single_gdf['area_km2'].iloc[0]
-
-    # 3. Generate gridMET file (outpath) if missing
-    if True: #not os.path.exists(outpath):
-        print(f"downloading gridmet: {gage}...")
-
-        if areakm2 < 10:
-            print(f"getting by coords {gage}")
-            try:
-                gr_df = gridmet.get_bycoords(
-                    coords=[single_gdf.geometry.iloc[0].centroid.x, single_gdf.geometry.iloc[0].centroid.y], 
-                    dates=date_range, 
-                    crs=single_gdf.crs, 
-                    variables=variables
-                )
-                gr_df.columns = gr_df.columns.str.split(' ').str[0]
-                gr_df = gr_df.rename(columns=rename_dict)
-
-                area_factor = areakm2 / 16
-                for var in ['pr', 'pet']:
-                    if f'{var}_sum' in gr_df.columns:
-                        gr_df[f'{var}_sum'] = gr_df[f'{var}_sum'] * area_factor
-
-                gr_df['swe'] = gage_swe_series
-                gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
-                gr_df.to_csv(outpath, index_label='date')
-            except Exception as e:
-                print(f"Failed getting coords for {gage}: {e}")
-
-        elif areakm2 < 25000:
-            print(f"area: {areakm2:.2f} km2")
-            try:
-                ds = gridmet.get_bygeom(geometry=single_gdf.geometry.iloc[0], dates=date_range, crs=single_gdf.crs, variables=variables)
-                ds_mean = ds[mean_vars].mean(dim=["lon", "lat"], skipna=True)
-                ds_sum = ds[sum_vars].sum(dim=["lon", "lat"], skipna=True)
-                df_mean = ds_mean.to_dataframe().reset_index()
-                df_sum = ds_sum.to_dataframe().reset_index()
-                gr_df = pd.merge(df_mean, df_sum, on='time')
-                gr_df = gr_df.rename(columns=rename_dict)
-                gr_df = gr_df.set_index('date', drop=True)
-                gr_df['swe'] = gage_swe_series
-                gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
-                gr_df.to_csv(outpath, index_label='date')
-            except Exception as e:
-                print(f'{gage} error during get_bygeom: {e}')
-                if 'unable to allocate' not in str(e).lower():
-                    print(f"getting by coords fallback for {gage}")
-                    try:
-                        gr_df = gridmet.get_bycoords(
-                            coords=[single_gdf.geometry.iloc[0].centroid.x, single_gdf.geometry.iloc[0].centroid.y], 
-                            dates=date_range, 
-                            crs=single_gdf.crs, 
-                            variables=variables
-                        )
-                        gr_df.columns = gr_df.columns.str.split(' ').str[0]
-                        gr_df = gr_df.rename(columns=rename_dict)
-
-                        area_factor = areakm2 / 16
-                        for var in ['pr', 'pet']:
-                            if f'{var}_sum' in gr_df.columns:
-                                gr_df[f'{var}_sum'] = gr_df[f'{var}_sum'] * area_factor
-
-                        gr_df['swe'] = gage_swe_series
-                        if gr_df['swe'].isna().sum() == len(gr_df):
-                            fuck
-                        gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
-                        gr_df.to_csv(outpath, index_label='date')
-                    except Exception as fallback_e:
-                        print(f"Fallback failed for {gage}: {fallback_e}")
-                else:
-                    print(f"{gage} {name} too big (memory allocation issue)")
-        else:
-            print(f"{gage} {name} too big, didn't try")
 
 #############
 # Merge with flow with 0 interpolation
