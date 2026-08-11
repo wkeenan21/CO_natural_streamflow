@@ -217,121 +217,6 @@ def _export_yearly_csv(year_data, year, gage_ids, export_folder):
     print(f"Saved: {export_path}")
 
 
-def prepare_dem_inputs(raw_dem_path, output_folder):
-    """
-    Conditions a raw DEM, computes D8 flow direction and accumulation, 
-    and saves the resulting rasters to a folder.
-    
-    Parameters:
-    -----------
-    raw_dem_path : str
-        Path to the raw input DEM file.
-    output_folder : str
-        Directory path where the output rasters will be saved.
-        
-    Returns:
-    --------
-    tuple : (filled_path, fdir_path, acc_path)
-        Paths to the three newly created raster files.
-    """
-
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-        
-    # Initialize Pysheds grid and read raw DEM
-    grid = Grid.from_raster(raw_dem_path)
-    dem = grid.read_raster(raw_dem_path)
-    
-    # 1. Condition the DEM
-    print("Filling pits and depressions...")
-    pit_filled = grid.fill_pits(dem)
-    dep_filled = grid.fill_depressions(pit_filled)
-    filled_dem = grid.resolve_flats(dep_filled)
-    
-    # 2. Calculate Routing
-    print("Calculating D8 flow direction and accumulation...")
-    dirmap = (64, 128, 1, 2, 4, 8, 16, 32)
-    fdir = grid.flowdir(filled_dem, dirmap=dirmap)
-    acc = grid.accumulation(fdir, dirmap=dirmap)
-    
-    # 3. Define output filenames
-    filled_path = os.path.join(output_folder, "dem_filled.tif")
-    fdir_path = os.path.join(output_folder, "flow_direction.tif")
-    acc_path = os.path.join(output_folder, "flow_accumulation.tif")
-    
-    # 4. Export rasters to disk
-    print(f"Saving outputs to {output_folder}...")
-    grid.to_raster(filled_dem, filled_path)
-    grid.to_raster(fdir, fdir_path)
-    grid.to_raster(acc, acc_path)
-    
-    print("Pre-processing complete.")
-    return filled_path, fdir_path, acc_path
-
-def delineate_watersheds_preprocessed(fdir_path, acc_path, x, y, gage, snap_threshold=1000):
-    """
-    Delineates watersheds using pre-calculated flow direction and accumulation rasters.
-    
-    Parameters:
-    -----------
-    fdir_path : str
-        Path to the pre-calculated D8 flow direction raster.
-    acc_path : str
-        Path to the pre-calculated flow accumulation raster.
-    points_gdf : gpd.GeoDataFrame
-        GeoDataFrame containing streamgage points.
-    gage_col : str
-        Column name holding the unique gage ID.
-    snap_threshold : int
-        Minimum accumulation cell count to snap the point to.
-        
-    Returns:
-    --------
-    gpd.GeoDataFrame
-        A GeoDataFrame containing the polygon watersheds with matching gage IDs.
-    """
-    # Initialize grids using the flow direction layout as the primary coordinate framework
-    grid = Grid.from_raster(fdir_path)
-    fdir = grid.read_raster(fdir_path)
-    acc = grid.read_raster(acc_path)
-    
-    # D8 direction mapping structure used during generation
-    dirmap = (64, 128, 1, 2, 4, 8, 16, 32)
-    
-    # Ensure points match the raster coordinate system
-    dem_crs = grid.crs
-    if points_gdf.crs != dem_crs:
-        raise Exception(f"Reproject points to match raster CRS: {dem_crs}")
-        
-    watershed_records = []
-    print(f"Delineating {len(points_gdf)} watersheds from pre-processed surfaces...")
-    
-    x_snap, y_snap = grid.snap_to_mask(acc > snap_threshold, (x, y))
-    
-    # Extract catchment array
-    catchment = grid.catchment(x=x_snap, y=y_snap, fdir=fdir, dirmap=dirmap, xytype='coordinate')
-    catchment = catchment.astype(np.int32)
-    
-    # Vectorize boundary arrays into shapely geometry shapes
-    shapes_generator = grid.polygonize(catchment)
-    polygons = [shape(s) for s, val in shapes_generator if val > 0]
-    
-    if polygons:
-        combined_polygon = polygons[0] if len(polygons) == 1 else polygons[0].union(polygons[1:])
-        watershed_records.append({
-            gage_col: gage_id,
-            'geometry': combined_polygon
-        })
-    else:
-        print(f"Warning: No polygon generated for gage {gage_id}")
-    
-    print(f"Failed to delineate gage {gage_id}: {e}")
-            
-    # Build final GeoDataFrame output
-    #result_gdf = gpd.GeoDataFrame(watershed_records, crs=dem_crs)
-    return watershed_records
-
-
 def remove_nested_basins(gdf, area_col=None):
     gdf = gdf.copy().reset_index(drop=True)
 
@@ -691,9 +576,9 @@ if not skip:
     # use the NLDI gages to approximate basin boundaries
     # (if its not in here, we don't want it)
     old_basins_path = os.path.join(appcwd, r'spatial_data\v1\all_UCOL_basins.parquet')
-    basins = gpd.read_parquet(old_basins_path).to_crs(5070)
+    old_basins = gpd.read_parquet(old_basins_path).to_crs(5070)
     keep = []
-    keep = keep + basins.gage.to_list()
+    keep = keep + old_basins.gage.to_list()
     
     # check for ones with streamflow for the app
     has_flow = []
@@ -704,7 +589,7 @@ if not skip:
     # remove other ones
     keep = set(keep).intersection(set(has_flow))
     gages = gages[gages['gage'].isin(keep)]
-    basins = basins[basins['gage'].isin(gages.gage.to_list())]
+    old_basins = old_basins[old_basins['gage'].isin(gages.gage.to_list())]
 
     # delineate basins
     terrain_folder = os.path.join(ncwd, r'data\terrain')
@@ -732,7 +617,7 @@ if not skip:
 
     # 2. Perform a spatial join checking containment
     joined = gpd.sjoin(
-        basins.to_crs(5070), dem_gdf, how="left", predicate="within"
+        old_basins.to_crs(5070), dem_gdf, how="left", predicate="within"
     )
 
     # drop ones that cover both
@@ -745,10 +630,14 @@ if not skip:
 
     # 3. Map results back with fallback to 'big'
     joined = joined.set_index('gage').sort_index().to_crs(5070)
-    basins = basins.set_index('gage').sort_index().to_crs(5070)
+    old_basins = old_basins.set_index('gage').sort_index().to_crs(5070)
     gages = gages.set_index('gage').sort_index().to_crs(5070)
-    basins["dem"] = joined["dem_name"].fillna("big50")
+    old_basins["dem"] = joined["dem_name"].fillna("big50")
     gages["dem"] = joined["dem_name"].fillna("big50")
+
+    # these gotta go with south
+    redo_w_south = ['09118450', '09124500', '09146200', '09147000', '09147025', '09147500', '09149500']
+    gages['dem'] = np.where(gages.index.isin(redo_w_south), 'south', gages['dem'])
 
     print('lees ferry is', gages[gages.index=='09380000']['dem'], 'keystone is:', gages[gages.index=='09047700']['dem'])
 
@@ -758,10 +647,11 @@ if not skip:
     cats = []
     snap_threshold = 1000
     direction ='big50'
-    directions = ['big50', 'north', 'south']
+    directions = ['north', 'south', 'big50', 'missing']
+    missing_list = []
     for direction in directions:
         # filter to just this direction
-        if not os.path.exists(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp')):
+        if not os.path.exists(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp')) and direction != 'missing':
             print(f'starting {direction}')
             sub_gages = gages[gages['dem']==direction]
             print(f'doing {len(sub_gages)} gages for {direction}')
@@ -784,45 +674,77 @@ if not skip:
             wbt.extract_streams(flow_accum=flow_acc_path, output=streams_path,threshold=2000.0)
             print('snapping pour points')
             pp_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\snapped.shp')
-            wbt.jenson_snap_pour_points(pour_pts=sg_path, streams=streams_path, output=pp_path, snap_dist=100.0)
+            wbt.jenson_snap_pour_points(pour_pts=sg_path, streams=streams_path, output=pp_path, snap_dist=1000)
             pp = gpd.read_file(pp_path)
-            # pp = pp[['gage', 'geometry']]
-            # pp.to_file(pp_path)
+            pp = pp[['gage', 'geometry']]
+            pp.to_file(pp_path)
             print('wshed delineation')
             wshed_raster_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\wshed_raster.tif')
             wbt.unnest_basins(d8_pntr=flow_dir_path, pour_pts=pp_path, output=wshed_raster_path)
-        
+
             vector_cats = []
-            for i in range(1,18):
-                path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\wshed_raster_{i}.tif')
-                outpath = os.path.join(terrain_folder, fr'dem_ucol_{direction}\wshed_vector_{i}.shp')
-                if not os.path.exists(outpath):
-                    v = wbt.raster_to_vector_polygons(path, output=outpath)
+            for file in os.listdir(os.path.join(terrain_folder, fr'dem_ucol_{direction}')):
+                if 'wshed_raster' in file:
+                    path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\{file}')
+                    vector_name = file.replace('raster', 'vector')
+                    vector_name = vector_name.replace('.tif', '.shp')
+                    outpath = os.path.join(terrain_folder, fr'dem_ucol_{direction}\{vector_name}')
+                else:
+                    continue
+                #if not os.path.exists(outpath):
+                v = wbt.raster_to_vector_polygons(path, output=outpath)
                 cats = gpd.read_file(outpath)
+                print(len(cats))
                 vector_cats.append(cats)
 
-                # align value with the gage ID
-                cats = pd.concat(vector_cats)
-                cats['VALUE'] = cats['VALUE'].astype(int)
-                cats = cats.set_index('VALUE')
-                pp_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\snapped.shp')
-                pp = gpd.read_file(pp_path)
-                pp['VALUE'] = pp.index + 1
-                pp = pp.set_index('VALUE')
+            # align value with the gage ID
+            cats = pd.concat(vector_cats)
+            cats['VALUE'] = cats['VALUE'].astype(int)
+            cats = cats.set_index('VALUE')
+            pp_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\snapped.shp')
+            pp = gpd.read_file(pp_path)
+            pp['VALUE'] = pp.index + 1
+            pp = pp.set_index('VALUE')
 
-                basins = pd.merge(left=cats, right=pp[['gage']], left_index=True, right_index=True)
-                basins.geometry = basins.geometry.to_crs(5070)
-                basins['geometry'] = basins.geometry.simplify(tolerance=100)
-                basins.to_file(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp'))
+            basins_dir = pd.merge(left=cats, right=pp[['gage']], left_index=True, right_index=True)
+            basins_dir.geometry = basins_dir.geometry.to_crs(5070)
+            basins_dir['geometry'] = basins_dir.geometry.simplify(tolerance=100)
+            # save
+            basins_dir.to_file(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp'))
+
+    # concat the 3 directions
+    bsns_list = []
+    for direction in ['north', 'south']:
+        basins_dir_path = os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp')
+        bsns = gpd.read_file(basins_dir_path)
+        bsns['dem'] = direction
+        bsns_list.append(bsns)
+    bsns = pd.concat(bsns_list)
+    # keep the duplicates from the south
+    bsns = bsns.sort_values(by=['gage', 'dem'], ascending=[True, False])
+    bsns = bsns.drop_duplicates(subset='gage', keep='first')
+    print(f'{len(bsns)} basins from 30m North and South DEMs')
+
+    bsns_big = gpd.read_file(os.path.join(terrain_folder, fr'dem_ucol_big50\merged_wsheds.shp'))
+    bsns_big['dem'] = 'big50'
+
+    # check what we are missing
+    still_need = set(gages.index).difference(set(bsns['gage']))
+    bsns_big = bsns_big[bsns_big['gage'].isin(still_need)]
+    basins = pd.concat([bsns, bsns_big])
+    print(f'Added {len(bsns_big)} basins from big DEM')
+
+    # check what we are still missing
+    still_need = set(gages.index).difference(set(basins['gage']))
+    if len(still_need) > 0:
+        nldi_fill = old_basins[old_basins.index.isin(still_need)]
+        basins = pd.concat([bsns, nldi_fill])
+        print(f'Added {len(nldi_fill)} basins from NLDI DEMs')
+
+    print(f'{len(basins)} total basins, {len(gages)} total gages')
 
     # get basin area
     basins['area_m2'] = basins.area
-
-    # save all the basins and gages
-    print(f'{len(basins)} basins, {len(gages)} gages')
-    print('basins with no gage:', set(basins.gage).difference(set(gages.gage)))
-    need_basin = set(gages.gage).difference(set(basins.gage))
-    print('gages with no basin:', set(gages.gage).difference(set(basins.gage))) # should be none
 
     # remove holes from geometry:
     # Fill holes by re-constructing Polygons using only their exterior boundary
@@ -849,7 +771,6 @@ if not skip:
 
     # force gage index
     basins = basins.set_index('gage')
-    gages = gages.set_index('gage')
 
     # drop FID
     basins = basins.drop(columns=['FID'])
@@ -858,26 +779,47 @@ if not skip:
     basins['name'] = gages.name
 
     # some of the manual delineations might be broken
+
+    #basins_path = os.path.join(terrain_folder, f'dem_ucol_north\merged_wsheds.shp')
+    #basins = gpd.read_file(basins_path).set_index('gage')
+    #basins['area_m2'] = basins.area
     old_basins = gpd.read_parquet(old_basins_path)
     old_basins.set_index('gage', inplace=True)
-    broken_basins = ['09019000', '09050700']
 
+    # send to file for inspection
+    basins.to_file(os.path.join(terrain_folder, 'inspect_new_basins.shp'))
+    basins.sort_index(inplace=True)
     for gage in basins.index:
         try:
             new_area = basins[basins.index==gage]['area_m2'].iloc[0]
             old_area = old_basins[old_basins.index==gage]['area_m2'].iloc[0]
             area_frac = new_area/old_area
-            if area_frac > 1.2 or area_frac < 0.8:
+            if area_frac > 1.1 or area_frac < 0.9:
                 print(gage, f'{area_frac:.2f}')
         except:
             continue
 
+    # use NLDI basins for these instead
+    broken_basins = ['09019000', '09050700', '09027100', '09035700', '09036000', '09050100', '09110000', '09172500', '09330000','383926107593001']
+    nldi_fill = old_basins[old_basins.index.isin(broken_basins)]
+    print(f'geometry before: {basins[basins.index==broken_basins[0]]['geometry'].iloc[0]}')
+    old_basins = old_basins[old_basins.index.isin(basins.index)]
+    basins['geometry'] = np.where(basins.index.isin(broken_basins), old_basins['geometry'], basins['geometry'])
+    print(f'geometry after: {basins[basins.index==broken_basins[0]]['geometry'].iloc[0]}')
+    basins['dem'] = np.where(basins.index.isin(broken_basins), 'NLDI', basins['dem'])
+
+    # simplify NLDI ones
+    basins['geometry'] = basins.geometry.simplify(tolerance=100)
+    
     # Enforce that they are the same
     basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
     gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 
     basins = basins.sort_index()
     gages = gages.sort_index()
+
+    # drop some columns
+    basins = basins.drop(columns=['VALUE'])
 
     if all(basins.index == gages.index):
         basins.to_parquet(basins_path)
@@ -1752,6 +1694,10 @@ set10[['name', 'geometry']].explore()
 ################
 # PREP NH
 ################
+
+# prep config dir for hyperparameter tuning
+epochs = [25, 50, 100]
+
 import yaml
 import pickle
 
