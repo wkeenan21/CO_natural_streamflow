@@ -647,11 +647,11 @@ if not skip:
     cats = []
     snap_threshold = 1000
     direction ='big50'
-    directions = ['north', 'south', 'big50', 'missing']
+    directions = ['north', 'south', 'big50']
     missing_list = []
     for direction in directions:
         # filter to just this direction
-        if not os.path.exists(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp')) and direction != 'missing':
+        if not os.path.exists(os.path.join(terrain_folder, fr'dem_ucol_{direction}\merged_wsheds.shp')):
             print(f'starting {direction}')
             sub_gages = gages[gages['dem']==direction]
             print(f'doing {len(sub_gages)} gages for {direction}')
@@ -723,7 +723,12 @@ if not skip:
     # keep the duplicates from the south
     bsns = bsns.sort_values(by=['gage', 'dem'], ascending=[True, False])
     bsns = bsns.drop_duplicates(subset='gage', keep='first')
+    bsns[bsns['gage']=='09146200'].explore() # check uncompagra
     print(f'{len(bsns)} basins from 30m North and South DEMs')
+
+    # gunnison is messed up, drop them (they will be added back from the big DEM)
+    use_big = ['09152500', '09144250']
+    bsns = bsns[~bsns.gage.isin(use_big)].copy()
 
     bsns_big = gpd.read_file(os.path.join(terrain_folder, fr'dem_ucol_big50\merged_wsheds.shp'))
     bsns_big['dem'] = 'big50'
@@ -783,7 +788,6 @@ if not skip:
     #basins_path = os.path.join(terrain_folder, f'dem_ucol_north\merged_wsheds.shp')
     #basins = gpd.read_file(basins_path).set_index('gage')
     #basins['area_m2'] = basins.area
-    old_basins = gpd.read_parquet(old_basins_path)
     old_basins.set_index('gage', inplace=True)
 
     # send to file for inspection
@@ -802,18 +806,18 @@ if not skip:
     # use NLDI basins for these instead
     broken_basins = ['09019000', '09050700', '09027100', '09035700', '09036000', '09050100', '09110000', '09172500', '09330000','383926107593001']
     nldi_fill = old_basins[old_basins.index.isin(broken_basins)]
-    print(f'geometry before: {basins[basins.index==broken_basins[0]]['geometry'].iloc[0]}')
+    print(f'geometry before:')
+    basins[basins.index==broken_basins[0]]['geometry'].iloc[0]
     old_basins = old_basins[old_basins.index.isin(basins.index)]
     basins['geometry'] = np.where(basins.index.isin(broken_basins), old_basins['geometry'], basins['geometry'])
-    print(f'geometry after: {basins[basins.index==broken_basins[0]]['geometry'].iloc[0]}')
+    print(f'geometry after:')
+    basins[basins.index==broken_basins[0]]['geometry'].iloc[0]
     basins['dem'] = np.where(basins.index.isin(broken_basins), 'NLDI', basins['dem'])
 
     # simplify NLDI ones
     basins['geometry'] = basins.geometry.simplify(tolerance=100)
     
-    # Enforce that they are the same
-    basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
-    gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
+
 
     basins = basins.sort_index()
     gages = gages.sort_index()
@@ -821,8 +825,18 @@ if not skip:
     # drop some columns
     basins = basins.drop(columns=['VALUE'])
 
+    # make sure they look good
+    basins[basins.index.isin(['09380000', '09330000', '09152500'])].explore()
+    basins.explore()
+
+    # Enforce that they are the same
+    basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
+    gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
+    basins_shp_path = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\spatial_data\all_UCOL_basins.shp'
+
     if all(basins.index == gages.index):
         basins.to_parquet(basins_path)
+        basins.to_file(basins_shp_path)
         gages.to_parquet(gages_path)
         print(f'saved to {basins_path} and {gages_path}')
         lees_ferry = basins[basins.index=='09380000']
@@ -835,6 +849,7 @@ basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
 gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 basins = gpd.read_parquet(basins_path)
 gages = gpd.read_parquet(gages_path)
+basins[basins.index.isin(['09380000', '09330000', '09152500'])].explore()
 
 import pygridmet as gridmet
 import rioxarray
@@ -874,30 +889,29 @@ snodas_lookup = pd.concat(snodas_dfs)
 snodas_lookup['date'] = pd.to_datetime(snodas_lookup['date'])
 snodas_lookup = snodas_lookup.set_index('date')
 snodas_lookup = snodas_lookup.sort_values(by='date')
-
 basins = basins.to_crs(4326)
+
 # prepare rename dict
 rename_dict = {v: f"{v}_mean" for v in mean_vars}
 rename_dict['time'] = 'date'
 rename_dict.update({v: f"{v}_sum" for v in sum_vars})
 appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
-nodata = []
+results = []
 # Loop over each individual watershed
-for gage in basins.gage:
-    #gage = '09303400'
+
+# run it just for the coords fallback fails
+fails = basins[basins['data']=='coords fallback fail'].index.to_list()
+
+for gage in fails: # basins.index to run all
+    rd = {'gage':gage}
+    gage = '09053500'
     outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_new\{gage}.csv'
 
     # 2. Check for SNODAS data
-    try:
-        gage_swe_series = snodas_lookup[gage].dropna()
-        if gage_swe_series.empty or any(gage_swe_series.isna()):
-            raise Exception('no snow data')
-    except Exception as e:
-        print(f'no snodas for {gage}')
-        continue
+    gage_swe_series = snodas_lookup[gage].dropna()
 
     # Isolate watershed geometry once
-    single_gdf = basins[basins.gage == gage]
+    single_gdf = basins[basins.index == gage]
     name = single_gdf['name'].iloc[0]
     areakm2 = single_gdf['area_km2'].iloc[0]
 
@@ -905,7 +919,7 @@ for gage in basins.gage:
     if True: #not os.path.exists(outpath):
         print(f"downloading gridmet: {gage}...")
 
-        if areakm2 < 10:
+        if areakm2 < 8:
             print(f"getting by coords {gage}")
             try:
                 gr_df = gridmet.get_bycoords(
@@ -926,12 +940,14 @@ for gage in basins.gage:
                 gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
                 gr_df['gridmet_method'] = 'coordinates'
                 gr_df.to_csv(outpath, index_label='date')
+                rd['data'] = 'coords'
             except Exception as e:
                 print(f"Failed getting coords for {gage}: {e}")
-                nodata.append({gage:e})
+                rd['data'] = 'failed by coords'
+                
 
         elif areakm2 < 25000:
-            print(f"area: {areakm2:.2f} km2")
+            print(f"area: {areakm2:.2f} km2, getting by geom")
             try:
                 ds = gridmet.get_bygeom(geometry=single_gdf.geometry.iloc[0], dates=date_range, crs=single_gdf.crs, variables=variables)
                 ds_mean = ds[mean_vars].mean(dim=["lon", "lat"], skipna=True)
@@ -945,8 +961,10 @@ for gage in basins.gage:
                 gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
                 gr_df['gridmet_method'] = 'geometry'
                 gr_df.to_csv(outpath, index_label='date')
+                rd['data'] = 'geometry'
             except Exception as e:
                 print(f'{gage} error during get_bygeom: {e}')
+                continue
                 if 'unable to allocate' not in str(e).lower():
                     print(f"getting by coords fallback for {gage}")
                     try:
@@ -970,15 +988,23 @@ for gage in basins.gage:
                         gr_df = gr_df.rename(columns={'swe': 'swe_sum'})
                         gr_df['gridmet_method'] = 'coordinates'
                         gr_df.to_csv(outpath, index_label='date')
+                        rd['data':'coords fallback']
                     except Exception as fallback_e:
                         print(f"Fallback failed for {gage}: {fallback_e}")
+                        rd['data'] = 'coords fallback fail'
                 else:
                     print(f"{gage} {name} too big (memory allocation issue)")
-                    nodata.append({gage:e})
+                    rd['data'] = 'too big fail'
         else:
             print(f"{gage} {name} too big, didn't try")
-            nodata.append({gage:'too big'})
+            rd['data'] = 'too big no try'
 
+    results.append(rd)
+
+rdf = pd.DataFrame().from_dict(results)
+rdf = rdf.set_index('gage')
+
+basins['data'] = rdf['data']
 
 skip2 = False
 if not skip2:
@@ -999,7 +1025,7 @@ if not skip2:
         gage = fix_gage_id(usgsgage)
         rename_dict[usgsgage] = gage
     flow = flow.rename(columns=rename_dict)
-    name_dict = gages.set_index('gage')['name'].to_dict()
+    name_dict = gages['name'].to_dict()
     date_range = ("1979-10-01", "2025-09-30")
     #####################
     dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
@@ -1058,29 +1084,29 @@ if not skip2:
     current_time = time.time()
     seconds_in_1_hours = 60 * 60
     # send to csvs
-    for gage in basins.gage:
+    for gage in basins.index:
 
         out_path_small = os.path.join(appDir, f"{gage}.csv")
         out_path = os.path.join(wdvrsDir, f"{gage}.csv")
         
-        # Check if the file exists first
-        if os.path.exists(out_path_small):
-            df = pd.read_csv(out_path_small, parse_dates=['date'], index_col='date')
-            df_cleaned = df[~df.index.duplicated(keep='first')]
-            df_cleaned = df_cleaned.asfreq('D')
-            df_cleaned.to_csv(out_path_small, index_label='date')
+        # # Check if the file exists first
+        # if os.path.exists(out_path_small):
+        #     df = pd.read_csv(out_path_small, parse_dates=['date'], index_col='date')
+        #     df_cleaned = df[~df.index.duplicated(keep='first')]
+        #     df_cleaned = df_cleaned.asfreq('D')
+        #     df_cleaned.to_csv(out_path_small, index_label='date')
 
-        if os.path.exists(out_path):
-            df = pd.read_csv(out_path, parse_dates=['date'], index_col='date')
-            df_cleaned = df[~df.index.duplicated(keep='first')]
-            df_cleaned = df_cleaned.asfreq('D')
-            df_cleaned.to_csv(out_path, index_label='date')
+        # if os.path.exists(out_path):
+        #     df = pd.read_csv(out_path, parse_dates=['date'], index_col='date')
+        #     df_cleaned = df[~df.index.duplicated(keep='first')]
+        #     df_cleaned = df_cleaned.asfreq('D')
+        #     df_cleaned.to_csv(out_path, index_label='date')
 
         df = flow[[gage]]
         df = df.rename(columns={gage:'Q_cms'})
         df['Q_cfs'] = df['Q_cms'] * 35.3147
         # add area and mmd
-        area = basins[basins['gage']==gage]['area_m2'].iloc[0]
+        area = basins[basins.index==gage]['area_m2'].iloc[0]
         df['Q_mmd'] = (df['Q_cms'] * 86400000) / area
         df['area_m2'] = area
         # make sure it's got every day
@@ -1185,7 +1211,7 @@ if not skip2:
         else:
             # If no diversions found, we still save the original flow (or skip)
             combined_df = df
-            
+        
         combined_df = combined_df.asfreq('D')
         # 4. Save the new CSV
         combined_df.to_csv(out_path, index_label='date')
@@ -1209,13 +1235,13 @@ if not skip2:
 #############
 for gage in basins.index:
 
-    outpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas\{gage}.csv'
+    inpath = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_new\{gage}.csv'
     outpath2 = fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow0\{gage}.csv'
 
-    if True: #os.path.exists(outpath) and not os.path.exists(outpath2):
+    if os.path.exists(inpath): #os.path.exists(outpath) and not os.path.exists(outpath2):
         print(f'merging flow for {gage}...')
 
-        gr_df = pd.read_csv(outpath, parse_dates=['date'], index_col='date')
+        gr_df = pd.read_csv(inpath, parse_dates=['date'], index_col='date')
         if 'spatial_ref_x' in gr_df.columns and 'spatial_ref_y' in gr_df.columns:
             gr_df = gr_df.drop(columns=['spatial_ref_x', 'spatial_ref_y'])
 
@@ -1237,7 +1263,6 @@ for gage in basins.index:
 
         gr_df = pd.merge(left=gr_df, right=flow_df, how='left', left_index=True, right_index=True)
         gr_df = gr_df.asfreq('D')
-
         gr_df.to_csv(outpath2, index_label='date')
         print(f'Successfully generated {outpath2}')
 
@@ -1253,13 +1278,13 @@ basins = gpd.read_parquet(basins_path)
 gages = gpd.read_parquet(gages_path)
 
 # get attributes
-attrs_path = os.path.join(appcwd, r'attributes\all_UCOL_attributes.csv')
-attrs = pd.read_csv(attrs_path, dtype={'gage': np.float64})
+attrs_path = os.path.join(r"G:\My Drive\colab_out\attributes\all_UCOL_attributes.csv")
+attrs = pd.read_csv(attrs_path)
+attrs.rename(columns={'gauge_id':'gage'}, inplace=True)
 attrs['gage'] = attrs['gage'].apply(fix_gage_id)
 attrs = attrs.set_index('gage')
 
 # add names to attrs
-basins = basins.set_index('gage')
 attrs['name'] = basins.name
 name_col = attrs.pop("name")
 attrs.insert(0, "name", name_col)
@@ -1383,11 +1408,6 @@ for gage in basins.index.to_list():
 
     df.reset_index(drop=True, inplace=True)
 
-    #df.to_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
-    # df = pd.read_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
-    # df['date'] = pd.to_datetime(df['date'])
-    # df = df.set_index('date')
-
     # Store results
     wys = count_complete_water_years(df, 'Q_cfs')
 
@@ -1402,7 +1422,12 @@ for gage in basins.index.to_list():
 
     results.append(rd)
 
+    save = True
+    if save:
+        df.to_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
+
 rdf = pd.DataFrame().from_dict(results)
+
 # marge with the geometry and area
 rdf = rdf.set_index('gage')
 rdf = pd.merge(left=basins, right=rdf, left_index=True, right_index=True)
@@ -1694,25 +1719,23 @@ set10[['name', 'geometry']].explore()
 ################
 # PREP NH
 ################
-
-# prep config dir for hyperparameter tuning
-epochs = [25, 50, 100]
-
 import yaml
 import pickle
 
 # define paths
-ccwd = r'/content/drive/MyDrive/natural_streamflow_colab' # how to write file paths so Collab can read them
-pcwd = r'G:\My Drive\natural_streamflow_colab\configs\pickles' # where to save the pickles
+experiment = 1
+ccwd = fr'/content/drive/MyDrive/natural_streamflow_colab/configs/experiment{experiment}' # how to write file paths so Collab can read them
+pcwd = fr'G:\My Drive\natural_streamflow_colab\configs\experiment{experiment}\pickles' # where to save the pickles
+gcwd = fr'G:\My Drive\natural_streamflow_colab\configs\experiment{experiment}' # where to save the configs
 
 # 1. Save test_set.txt (list of gage IDs separated by line breaks)
-test_set_path = os.path.join(gcwd, 'configs', 'test_set.txt')
+test_set_path = os.path.join(gcwd, 'test_set.txt')
 with open(test_set_path, 'w') as f:
     f.write('\n'.join(map(str, test_gages)))
-test_set_gpath = f'{ccwd}/configs/test_set.txt'
+test_set_gpath = f'{ccwd}/test_set.txt'
 
-# Path to template YAML
-config_temp = os.path.join(gcwd, 'configs', 'config_template_cuda.yml')
+# Path to template config YAML
+config_temp = os.path.join(gcwd, 'config_template_cuda.yml')
 
 # 2. Iterate through training sets, save text files, and generate modified YAMLs
 for i in range(11):
@@ -1721,29 +1744,42 @@ for i in range(11):
     tset_gages = tset.index.to_list()
 
     # Save the training set gage list to a .txt file
-    tset_txt_path = os.path.join(gcwd, 'configs', f'{key}.txt')
+    tset_txt_path = os.path.join(gcwd, f'{key}.txt')
     with open(tset_txt_path, 'w') as f:
         f.write('\n'.join(map(str, tset_gages)))
 
     # Path to reference in YAML (using ccwd as specified)
-    train_set_gpath = f"{ccwd}/configs/{key}.txt"
+    train_set_gpath = f"{ccwd}/{key}.txt"
 
     # Read config template
     with open(config_temp, 'r') as f:
         config_data = yaml.safe_load(f)
 
+    # change experiment name
+    config_data['experiment_name'] = f'experiment{experiment}'
+
     # Modify basin file paths to point to the current training set path
-    config_data['validation_basin_file'] = train_set_gpath
+    config_data['validation_basin_file'] = test_set_gpath
     config_data['train_basin_file'] = train_set_gpath
     config_data['test_basin_file'] = test_set_gpath
+
+     # the pristine one needs validation dates for hyperparameter tuning
+    if i == 0:
+        config_data['validation_start_date'] = '01/10/2022'
+        config_data['validation_end_date'] = '30/09/2025'
+        config_data['test_start_date'] = '01/10/2003'
+        config_data['test_end_date'] = '30/09/2022'
 
     # add the per basin train periods
     trainpb = {}
     testpb = {}
+    valpb = {}
     train_sd = pd.to_datetime(config_data['train_start_date'], dayfirst=True)
     train_ed = pd.to_datetime(config_data['train_end_date'], dayfirst=True)
     test_sd = pd.to_datetime(config_data['test_start_date'], dayfirst=True)
     test_ed = pd.to_datetime(config_data['test_end_date'], dayfirst=True)
+    val_sd = pd.to_datetime(config_data['validation_start_date'], dayfirst=True)
+    val_ed = pd.to_datetime(config_data['validation_end_date'], dayfirst=True)
 
     for gage in tset.index.to_list() + test_gages:
         if gage not in test_gages:
@@ -1756,33 +1792,74 @@ for i in range(11):
             midpoint = fd + (ld - fd) / 2
             midpoint = midpoint.normalize()
             one_day_after = midpoint + pd.Timedelta(days=1)
-
+            # validation and test dates should be the same for all but set 0
             trainpb[gage] = {'start_dates': [train_sd], 'end_dates':[midpoint]}
             testpb[gage] = {'start_dates': [one_day_after], 'end_dates':[test_ed]}
+            valpb[gage] = {'start_dates': [val_sd], 'end_dates':[val_ed]}
         elif gage in five_unseen:
+            # don't train on these at all
             testpb[gage] = {'start_dates': [test_sd], 'end_dates':[test_ed]}
+            valpb[gage] = {'start_dates': [val_sd], 'end_dates':[val_ed]}
     
     test_pickle_path = os.path.join(pcwd, f'test_{i}.pkl')
-    test_pickle_gpath = f'{ccwd}/configs/pickles/test_{i}.pkl'
+    test_pickle_gpath = f'{ccwd}/pickles/test_{i}.pkl'
     train_pickle_path = os.path.join(pcwd, f'train_{i}.pkl')
-    train_pickle_gpath = f'{ccwd}/configs/pickles/train_{i}.pkl'
+    train_pickle_gpath = f'{ccwd}/pickles/train_{i}.pkl'
+    val_pickle_path = os.path.join(pcwd, f'val_{i}.pkl')
+    val_pickle_gpath = f'{ccwd}/pickles/val_{i}.pkl'
 
     # save files
     with open(test_pickle_path, "wb") as f:
         pickle.dump(testpb, f)
     with open(train_pickle_path, "wb") as f:
         pickle.dump(trainpb, f)
+    with open(val_pickle_path, "wb") as f:
+        pickle.dump(valpb, f)
     
     config_data['per_basin_test_periods_file'] = test_pickle_gpath
     config_data['per_basin_train_periods_file'] = train_pickle_gpath
+    config_data['per_basin_validation_periods_file'] = val_pickle_gpath
 
     # delete global start and end dates
-    for date in ['train_start_date', 'train_end_date', 'test_start_date', 'test_end_date']:
+    for date in ['train_start_date', 'train_end_date', 'test_start_date', 'test_end_date', 'validation_start_date', 'validation_end_date']:
         del config_data[date]
 
+    if i == 0:
+        print(testpb)
+
     # Save modified configuration to new YAML file
-    config_path = os.path.join(gcwd, 'configs', f'config_{key}.yml')
+    config_path = os.path.join(gcwd, f'config_{key}.yml')
     with open(config_path, 'w') as f:
         yaml.safe_dump(config_data, f, default_flow_style=False)
 
-    stop
+# Prep for tuning
+tcwd = fr'G:\My Drive\natural_streamflow_colab\configs\tuning'
+
+# Path to pristine config YAML
+config_0 = os.path.join(gcwd, 'config_train_set_0.yml')
+
+# prep config dir for hyperparameter tuning
+hiddens = [64, 128, 256]
+dropouts = [0.1, 0.2]
+batchs = [128, 256]
+epochs = [30, 40, 50]
+
+for h in hiddens:
+    for d in dropouts:
+        for b in batchs:
+        # Read config template
+            with open(config_0, 'r') as f:
+                config_data = yaml.safe_load(f)
+
+            config_data['hidden_size'] = h
+            config_data['output_dropout'] = d
+            config_data['batch_size'] = b
+
+            d_str = str(d)[-1]
+
+            # change experiment name
+            config_data['experiment_name'] = f'experiment{experiment}_tuning'
+
+            config_path = os.path.join(tcwd, f'batch{b}_hidden{h}_dropout{d_str}.yml')
+            with open(config_path, 'w') as f:
+                yaml.safe_dump(config_data, f, default_flow_style=False)
