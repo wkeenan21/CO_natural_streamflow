@@ -1013,6 +1013,7 @@ if not skip2:
     basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
     gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
     basins = gpd.read_parquet(basins_path)
+    basins.geometry = basins.geometry.to_crs(4326) # need this for spatial joins
     gages = gpd.read_parquet(gages_path)
     big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
     flow = pd.read_csv(big_flow_path).set_index('date')
@@ -1049,6 +1050,11 @@ if not skip2:
     dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
     dvrs.to_parquet(os.path.join(appcwd, r"spatial_data\ucrb_diversion_master_table.parquet"))
 
+    # RESERVOIR EVAP
+    evap = gpd.read_parquet(r"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\ucol_reservoirs.parquet")
+    evap['RES_NAME'] = evap['RES_NAME'].str.replace(' ', '_')
+    evap_joined = gpd.sjoin(evap, basins, how="inner", predicate="within")
+
     # WATERSHEDS
     # gageID column = gage
     # WIDE CSV FOR DIVERSION DATA IN CFS
@@ -1077,7 +1083,6 @@ if not skip2:
     # 1. Spatial Join: Find which diversions are in which watersheds
     # 'inner' join keeps only points that fall inside a polygon
     # 'within' ensures the point is geometrically inside the watershed boundary
-    basins.geometry = basins.geometry.to_crs(4326)
     joined = gpd.sjoin(dvrs, basins, how="inner", predicate="within")
 
     import time
@@ -1085,7 +1090,7 @@ if not skip2:
     seconds_in_1_hours = 60 * 60
     # send to csvs
     for gage in basins.index:
-
+        gage = '09315000'
         out_path_small = os.path.join(appDir, f"{gage}.csv")
         out_path = os.path.join(wdvrsDir, f"{gage}.csv")
         
@@ -1117,6 +1122,8 @@ if not skip2:
         
         # Identify siteIDs for diversions located in this specific watershed
         target_diversions = joined[joined['gage'] == gage]['siteID'].unique()
+        target_evaps = evap_joined[evap_joined['gage']==gage]['RES_NAME'].unique()
+        
         print(gage, f'diversions: {len(target_diversions)}')
 
         # loop through the diversions
@@ -1192,6 +1199,17 @@ if not skip2:
                     # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
                     subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[cu_cols].sum(axis=1)
             
+            # get evaps
+            if len(target_evaps) > 0:
+                evapdfs = []
+                for res in target_evaps:
+                    evap = pd.read_parquet(fr"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\{res}.parquet")
+                    evap['date'] = pd.to_datetime(evap['start_date'])
+                    evap = evap.set_index('date')
+                    evapdfs.append(evap[''])
+                    
+                    stop
+
             # 4. merge
             combined_df = pd.merge(
                 df, 
