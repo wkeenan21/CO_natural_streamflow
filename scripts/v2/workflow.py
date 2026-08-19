@@ -1090,7 +1090,7 @@ if not skip2:
     seconds_in_1_hours = 60 * 60
     # send to csvs
     for gage in basins.index:
-        gage = '09315000'
+        #gage = '09315000'
         out_path_small = os.path.join(appDir, f"{gage}.csv")
         out_path = os.path.join(wdvrsDir, f"{gage}.csv")
         
@@ -1119,12 +1119,13 @@ if not skip2:
         # add name and gage as columns
         df['name'] = name_dict[gage]
         df['gage'] = gage
+        # filter to 1980 and up
+        df = df[df.index.year>1980].copy()
         
         # Identify siteIDs for diversions located in this specific watershed
         target_diversions = joined[joined['gage'] == gage]['siteID'].unique()
         target_evaps = evap_joined[evap_joined['gage']==gage]['RES_NAME'].unique()
         
-        print(gage, f'diversions: {len(target_diversions)}')
 
         # loop through the diversions
         if len(target_diversions) > 0:
@@ -1153,6 +1154,9 @@ if not skip2:
                 col for col in target_diversions 
                 if "_".join(col.split("_")[:2]) not in ids_to_remove
             ]
+
+            # do it for each unit
+            units = ['cfs', 'mmd', 'cms']
                 
             if valid_cols:
                 # 1. Extract the raw data
@@ -1160,15 +1164,13 @@ if not skip2:
                 # 2. Convert raw diversions to Consumptive Use (CU)
                 useDict = {
                     'irrigation': -0.6, 'municipal': -0.3, 'interbasin': -1, 
-                    'industrial': -1, 'hydropower': 0, 'intrabasin': -1, 'transbasin': 1
+                    'industrial': -1, 'hydropower': 0, 'intrabasin': -1, 'transbasin': 1,
                 }
 
                 # INTERBASIN = all water leaves UCOL
                 # INTRABASIN = water may or may not leave sub-basin. Does not leave UCOL.
                 # TRANSBASIN = water imported from a different sub-basin within UCOL.
                 
-                # do it for each unit
-                units = ['cfs', 'cms', 'mmd']
                 # aggregate diversions by type
                 cu_types = useDict.keys()
                 for unit in units:
@@ -1195,20 +1197,47 @@ if not skip2:
                             subset_dvrs[f'{cu_type}_{unit}'] = subset_dvrs[matched_cols].sum(axis=1)
                         else:
                             subset_dvrs[f'{cu_type}_{unit}'] = 0.0
-                    
+
                     # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
                     subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[cu_cols].sum(axis=1)
             
             # get evaps
             if len(target_evaps) > 0:
-                evapdfs = []
+                dfs = []
                 for res in target_evaps:
                     evap = pd.read_parquet(fr"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\{res}.parquet")
                     evap['date'] = pd.to_datetime(evap['start_date'])
                     evap = evap.set_index('date')
-                    evapdfs.append(evap[''])
-                    
-                    stop
+                    evap_col = f'evap_{res}'
+                    evap = evap.rename(columns={'E_volume (m3)': evap_col})[[evap_col]]
+                    dfs.append(evap)
+            
+                evap_df = pd.concat(dfs, axis=1)
+
+                # convert to negative
+                mmd_scale = (2446575.5461 / area) * -1 # goes from cfs to mmd
+                CONVERSION_FACTORS = {
+                    'cms': -1 / 86400,
+                    'cfs': -35.3146667 / 86400,
+                    'mmd': mmd_scale,
+                }
+
+                # Convert the whole DataFrame to cfs
+                evap_df = pd.concat(
+                    [evap_df.mul(CONVERSION_FACTORS[u]).add_suffix(f'_{u}') for u in units],
+                    axis=1
+                )
+                # sum total evap
+                for unit in units:
+                    unit_cols = evap_df.filter(like=f'_{unit}').columns
+                    evap_df[f'evap_{unit}'] = evap_df[unit_cols].sum(axis=1)
+
+                # merge diversions and evaporation
+                subset_dvrs = pd.merge(left=subset_dvrs, right=evap_df, how='left', left_index=True, right_index=True)
+
+                # add evaporation to Q_CU
+                for unit in units:
+                    subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[f'Q_CU_{unit}'] + subset_dvrs[f'evap_{unit}']
 
             # 4. merge
             combined_df = pd.merge(
@@ -1236,6 +1265,7 @@ if not skip2:
 
         # make a smaller df without all the diversions
         cu_types2 = []
+        cu_types = list(cu_types) + ['evap']
         for unit in units:
             for cu_type in cu_types:
                 cu_types2.append(f'{cu_type}_{unit}')
@@ -1246,6 +1276,7 @@ if not skip2:
         small_df.to_csv(out_path_small, index_label='date')
 
         print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
+    
 
 
 #############
@@ -1322,6 +1353,7 @@ for unit in units:
 results = []
 Q_col = 'Q_cfs'
 for gage in basins.index.to_list():
+
     print(gage)
     rd = {'gage':gage}
 
@@ -1364,7 +1396,7 @@ for gage in basins.index.to_list():
     rd['period'] = period_length
 
     # CONSUMPTIVE USE
-    CU_vars = ['irrigation' , 'municipal', 'intrabasin', 'interbasin', 'industrial']
+    CU_vars = ['irrigation' , 'municipal', 'intrabasin', 'interbasin', 'industrial', 'evap']
     CU = 0
     for var in CU_vars:
         try: # try because the columns don't exist sometimes
@@ -1380,6 +1412,12 @@ for gage in basins.index.to_list():
     divert_ratio = 0.1
     divert = CU/Q
     rd['cu_frac'] = divert
+
+    try:
+        evapmean = df[f'evap_cfs'].mean()
+        rd['mean_daily_evap_cfs'] = evapmean
+    except:
+        rd['mean_daily_evap_cfs'] = 0
 
     # Ensure Q_NAT_cfs exists; if missing, mirror Q_cfs
     for Q in Q_cols:
@@ -1860,24 +1898,26 @@ config_0 = os.path.join(gcwd, 'config_train_set_0.yml')
 hiddens = [64, 128, 256]
 dropouts = [0.1, 0.2]
 batchs = [128, 256]
-epochs = [30, 40, 50]
+epochs = [50]
 
-for h in hiddens:
-    for d in dropouts:
-        for b in batchs:
-        # Read config template
-            with open(config_0, 'r') as f:
-                config_data = yaml.safe_load(f)
+for e in epochs:
+    for h in hiddens:
+        for d in dropouts:
+            for b in batchs:
+            # Read config template
+                with open(config_0, 'r') as f:
+                    config_data = yaml.safe_load(f)
 
-            config_data['hidden_size'] = h
-            config_data['output_dropout'] = d
-            config_data['batch_size'] = b
+                config_data['hidden_size'] = h
+                config_data['output_dropout'] = d
+                config_data['batch_size'] = b
+                config_data['epochs'] = e
 
-            d_str = str(d)[-1]
+                d_str = str(d)[-1]
 
-            # change experiment name
-            config_data['experiment_name'] = f'experiment{experiment}_tuning'
+                # change experiment name
+                config_data['experiment_name'] = f'experiment{experiment}_tuning'
 
-            config_path = os.path.join(tcwd, f'batch{b}_hidden{h}_dropout{d_str}.yml')
-            with open(config_path, 'w') as f:
-                yaml.safe_dump(config_data, f, default_flow_style=False)
+                config_path = os.path.join(tcwd, f'batch{b}_hidden{h}_dropout{d_str}_epoch{e}.yml')
+                with open(config_path, 'w') as f:
+                    yaml.safe_dump(config_data, f, default_flow_style=False)
