@@ -1,6 +1,5 @@
 import geopandas as gpd
 import os
-import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1319,6 +1318,9 @@ for gage in basins.index:
 ############# REMOVE BASINS WITH TOO MUCH DAM STORAGE OR DIVERSION ##############
 # SKIP STEPS BY READING HERE
 # check for data completeness and prepare for modelling
+cwd = os.getcwd()
+ncwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow'
+appcwd = os.path.join(cwd, r'shiny-app\ucol_natural')
 gcwd = r'G:\My Drive\natural_streamflow_colab' # where to save things on your machine
 dcwd = r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\gr_snodas_flow0'
 basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
@@ -1478,7 +1480,7 @@ for gage in basins.index.to_list():
 
     results.append(rd)
 
-    save = True
+    save = False
     if save:
         df.to_parquet(os.path.join(gcwd, rf'timeseries\{gage}.parquet'))
 
@@ -1769,7 +1771,7 @@ for step in range(1, NUM_STEPS + 1):
     print(f"Train Set {step:02d} | Pristine: {num_pristine:02d} | Modified: {num_mod:02d} | Days: {days} | "
           f"Mean Reg Score: {mean_reg:.3f} | Mean Q: {mean_q_val:.1f} cfs | Mean Area: {mean_a_val:.1f} km²")
 
-set10 = training_sets['train_set_10']
+set10 = training_sets['train_set_1']
 set10[['name', 'geometry']].explore()
 
 ################
