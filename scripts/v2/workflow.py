@@ -1005,424 +1005,520 @@ rdf = rdf.set_index('gage')
 
 basins['data'] = rdf['data']
 
-skip2 = False
-if not skip2:
-    def glover_unit_response(t_days, a_ft, T_sqft_day, S):
-        """
-        Calculates the daily fraction of a discrete recharge pulse returning 
-        to the stream at time t using the Glover analytical derivative.
-        
-        a_ft        : Distance from field/recharge area to stream (ft)
-        T_sqft_day  : Aquifer Transmissivity (ft^2/day)
-        S           : Specific Yield (dimensionless, e.g., 0.1 to 0.2)
-        """
-        t = np.asarray(t_days, dtype=float)
-        q = np.zeros_like(t)
-        valid = t > 0
-        D = T_sqft_day / S
-        t_v = t[valid]
-        
-        # Instantaneous unit response function q(t)
-        q[valid] = (a_ft / (2 * np.sqrt(np.pi * D * (t_v**3)))) * np.exp(-(a_ft**2) / (4 * D * t_v))
-        return q
-    ###################
-    # SKIP STEPS BY READING HERE
-    reservoir_gdf = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs.parquet").to_crs(epsg=4326)
-    reservoir_gdf = reservoir_gdf[reservoir_gdf.areasqkm > 3]
-    basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
-    gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
-    basins = gpd.read_parquet(basins_path)
-    basins.geometry = basins.geometry.to_crs(4326) # need this for spatial joins
-    gages = gpd.read_parquet(gages_path)
-    big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
-    flow = pd.read_csv(big_flow_path).set_index('date')
-    flow.index = pd.to_datetime(flow.index)
-    # fix timeseries index
-    flow.index = flow.index.normalize().tz_localize(None)
-    # rename columns
-    rename_dict = {}
-    for usgsgage in flow.columns:
-        gage = fix_gage_id(usgsgage)
-        rename_dict[usgsgage] = gage
-    flow = flow.rename(columns=rename_dict)
-    name_dict = gages['name'].to_dict()
-    date_range = ("1979-10-01", "2025-09-30")
-    #####################
-    dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
+#############################
+# MERGE DIVERSIONS WITH STREAMFLOW
+##############################
+###################
+# SKIP STEPS BY READING HERE
+def fill_discharge_data(df: pd.DataFrame, col_names: tuple = ("Q_cms")) -> pd.DataFrame:
+    """Fills missing values in a streamflow time series based on flow-rate and time gap thresholds.
 
-    # this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
-    # this should be considered a transbasin import for that subbasin. For a large sub-basin that has a intrabasin diversion
-    # that delivers somewhere within the basin, the consumptive use of the intrabasin diversion will cancel out with
-    # the transbasin import
-    dvrs_intra = dvrs[dvrs['siteUse']=='intrabasin'].copy()
-    dvrs_intra['siteUse'] = 'transbasin'
-    dvrs_intra['origin_decLat'] = dvrs_intra['decLat']
-    dvrs_intra['origin_decLong'] = dvrs_intra['decLong']
-    dvrs_intra['decLat'] = dvrs_intra['dest_decLat']
-    dvrs_intra['decLong'] = dvrs_intra['dest_decLong']
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Dataframe with a DatetimeIndex and the target column.
+    col_name : str
+        Name of the discharge column.
 
-    dvrs_intra['siteID'] = dvrs_intra['siteID'].str.replace('intrabasin', 'transbasin')
-    dvrs_intra['siteName'] = dvrs_intra['siteName'] + '_delivery_point'
-    # add rows for the transbasin
-    dvrs = pd.concat([dvrs, dvrs_intra])
-    # need to rebuild the geometry after this
-    dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
-    dvrs.to_parquet(os.path.join(appcwd, r"spatial_data\ucrb_diversion_master_table.parquet"))
+    Returns:
+    --------
+    pd.DataFrame
+        Dataframe with updated missing values and a boolean flag column.
+    """
+    df = df.copy()
 
-    # RESERVOIR EVAP
-    evap = gpd.read_parquet(r"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\ucol_reservoirs.parquet")
-    evap['RES_NAME'] = evap['RES_NAME'].str.replace(' ', '_')
-    evap_joined = gpd.sjoin(evap, basins, how="inner", predicate="within")
+    # Calculate 20% of the mean of valid measurements
+    for col_name in col_names:
+        q_mean = df[col_name].mean()
+        low_flow_threshold = 0.20 * q_mean
 
-    # WATERSHEDS
-    # gageID column = gage
-    # WIDE CSV FOR DIVERSION DATA IN CFS
-    # COLUMN HEADERS = siteID
+        # Identify original non-NaN values and their positions
+        is_valid = df[col_name].notna()
 
-    # 1980 to 2025
-    dvrsFlow = pd.read_csv(os.path.join(ncwd, r"data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
-    dvrsFlow = dvrsFlow.rename(columns={'datetime':'date'})
-    dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
-    #dvrsFlow = pd.concat([dvrsFlow, dvrsFlow])
+        # Track original start and end valid measurements (Rule 2)
+        first_valid_idx = is_valid.idxmax() if is_valid.any() else None
+        last_valid_idx = is_valid.idxmin() if is_valid.any() else None
+        # Precise last index with valid data
+        last_valid_idx = df[col_name].dropna().index[-1]
 
-    # Ensure date columns are datetime objects for proper merging
-    dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
-    dvrsFlow = dvrsFlow.set_index('date')
+        # Create the helper columns: last valid value and last valid timestamp
+        prev_val = df[col_name].ffill()
+        last_valid_time = df.index.to_series().where(is_valid).ffill()
 
-    # dvrsFlow doesn't have any "transbasin" flags since we just made them up
-    for col in dvrsFlow.columns:
-        if 'intrabasin' in col:
-            trans_dup = col.replace('intrabasin', 'transbasin')
-            dvrsFlow[trans_dup] = dvrsFlow[col]
+        # Calculate days elapsed since the last valid measurement
+        days_since_last = (df.index - last_valid_time).dt.total_seconds() / (
+            24 * 3600
+        )
 
-    # OUT DIRECTORY FOR STREAMFLOW WITH DIVERSIONS
-    wdvrsDir = os.path.join(ncwd, r'data\timeseries\selected_w_diversion') # has everything
-    appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
+        # Condition 1: Low-flow (< 20% of mean) and gap < 120 days
+        is_low_flow = prev_val < low_flow_threshold
+        cond_low_flow = is_low_flow & (days_since_last < 120)
 
-    # 1. Spatial Join: Find which diversions are in which watersheds
-    # 'inner' join keeps only points that fall inside a polygon
-    # 'within' ensures the point is geometrically inside the watershed boundary
-    joined = gpd.sjoin(dvrs, basins, how="inner", predicate="within")
+        # Condition 2: Regular/High-flow (>= 20% of mean) and gap < 7 days
+        cond_high_flow = (~is_low_flow) & (days_since_last < 7)
 
-    import time
-    current_time = time.time()
-    seconds_in_1_hours = 60 * 60
-    # send to csvs
-    basins_subset = ['09211200', '09209400', '09205000', '09188500', '09210500', '09201500', '09196500', '09195000']
-    basins_subset = ['09041090', '09041400']
-    basins_sub = basins[basins.index.isin(basins_subset)].sort_values('area_m2')
-    for gage in basins_sub.index:
-        #gage = '09034250'
-        out_path_small = os.path.join(appDir, f"{gage}.csv")
-        out_path = os.path.join(wdvrsDir, f"{gage}.csv")
-        
-        # # Check if the file exists first
-        # if os.path.exists(out_path_small):
-        #     df = pd.read_csv(out_path_small, parse_dates=['date'], index_col='date')
-        #     df_cleaned = df[~df.index.duplicated(keep='first')]
-        #     df_cleaned = df_cleaned.asfreq('D')
-        #     df_cleaned.to_csv(out_path_small, index_label='date')
+        # Combined fill condition (excluding original valid points and outer edges)
+        fill_mask = (
+            df[col_name].isna()  # Only fill missing data
+            & (cond_low_flow | cond_high_flow)  # Respect low/high flow gap rules
+            & (df.index > first_valid_idx)  # Rule 2: Ignore leading edge
+            & (df.index < last_valid_idx)  # Rule 2: Ignore trailing edge
+        )
 
-        # if os.path.exists(out_path):
-        #     df = pd.read_csv(out_path, parse_dates=['date'], index_col='date')
-        #     df_cleaned = df[~df.index.duplicated(keep='first')]
-        #     df_cleaned = df_cleaned.asfreq('D')
-        #     df_cleaned.to_csv(out_path, index_label='date')
+        # Apply fills and create flag column
+        df[f"{col_name}_is_filled"] = fill_mask
+        df.loc[fill_mask, col_name] = prev_val[fill_mask]
 
-        df = flow[[gage]]
-        df = df.rename(columns={gage:'Q_cms'})
-        df['Q_cfs'] = df['Q_cms'] * 35.3147
-        # add area and mmd
-        area = basins[basins.index==gage]['area_m2'].iloc[0]
-        df['Q_mmd'] = (df['Q_cms'] * 86400000) / area
-        df['area_m2'] = area
-        # make sure it's got every day
-        df = df.asfreq('D')
-        # add name and gage as columns
-        df['name'] = name_dict[gage]
-        df['gage'] = gage
-        # filter to 1980 and up
-        df = df[df.index.year>1980].copy()
-        
-        # Identify siteIDs for diversions located in this specific watershed
-        target_diversions = joined[joined['gage'] == gage]['siteID'].unique()
-        target_evaps = evap_joined[evap_joined['gage']==gage]['RES_NAME'].unique()
-        
-        frac_in_cols = []
-        # loop through the diversions
-        if len(target_diversions) > 0:
+    return df
 
-            # 2. Group the full column names by their base div_id
-            from collections import defaultdict
-            id_groups = defaultdict(list)
-
-            for col in target_diversions:
-                # Extracts 'div_0001' from 'div_0001_intrabasin'
-                base_id = "_".join(col.split("_")[:2]) 
-                id_groups[base_id].append(col)
-
-            # 3. Identify base_ids that contain BOTH 'intrabasin' and 'transbasin'
-            ids_to_remove = set()
-            for base_id, cols in id_groups.items():
-                # Check if any column in this group ends with or contains the specific types
-                has_intra = any('intrabasin' in c for c in cols)
-                has_trans = any('transbasin' in c for c in cols)
-                
-                if has_intra and has_trans:
-                    ids_to_remove.add(base_id)
-
-            # 4. Filter them out of your final valid_cols list
-            valid_cols = [
-                col for col in target_diversions 
-                if "_".join(col.split("_")[:2]) not in ids_to_remove
-            ]
-
-            # do it for each unit
-            units = ['cfs', 'mmd', 'cms']
-                
-            if valid_cols:
-                # 1. Extract the raw data
-                subset_dvrs = dvrsFlow[valid_cols].copy()
-                # 2. Convert raw diversions to Consumptive Use (CU)
-                useDict = {
-                    'irrigation': -0.6, 'municipal': -0.3, 'interbasin': -1, 
-                    'industrial': -1, 'hydropower': 0, 'intrabasin': -1, 'transbasin': 1,
-                }
-
-                # INTERBASIN = all water leaves UCOL
-                # INTRABASIN = water may or may not leave sub-basin. Does not leave UCOL.
-                # TRANSBASIN = water imported from a different sub-basin within UCOL.
-                
-                # aggregate diversions by type
-                cu_types = useDict.keys()
-                for unit in units:
-                    # Create a temporary list to hold the names of the new CU columns
-                    cu_cols = []
-                    for col in valid_cols:
-                        # Determine the multiplier by checking the end of the siteID string
-                        multiplier = 0 # Default if no match is found
-                        for usage, val in useDict.items():
-                            if col.lower().endswith(usage):
-                                multiplier = val
-                                break
-
-                        mmd_scale = 2446575.5461 / area # goes from cfs to mmd
-                        unit_multiplier = {'cfs':1, 'cms':0.0283168, 'mmd':mmd_scale}
-                        # Calculate CU for this specific diversion
-                        cu_col_name = f"{col}_CU_{unit}"
-                        subset_dvrs[cu_col_name] = subset_dvrs[col] * multiplier * unit_multiplier[unit]
-
-                        cu_cols.append(cu_col_name)
-
-                    for cu_type in cu_types:
-                        matched_cols = [col for col in cu_cols if f'_{cu_type}_CU_{unit}' in col]
-                        if matched_cols:
-                            subset_dvrs[f'{cu_type}_{unit}'] = subset_dvrs[matched_cols].sum(axis=1)
-                        else:
-                            subset_dvrs[f'{cu_type}_{unit}'] = 0.0
-
-                    # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
-                    subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[cu_cols].sum(axis=1)
-            
-            # get evaps
-            if len(target_evaps) > 0:
-                dfs = []
-                for res in target_evaps:
-                    evap = pd.read_parquet(fr"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\{res}.parquet")
-                    evap['date'] = pd.to_datetime(evap['start_date'])
-                    evap = evap.set_index('date')
-                    evap_col = f'evap_{res}'
-                    evap = evap.rename(columns={'E_volume (m3)': evap_col})[[evap_col]]
-                    dfs.append(evap)
-            
-                evap_df = pd.concat(dfs, axis=1)
-
-                # convert to negative
-                mmd_scale = (2446575.5461 / area) * -1 # goes from cfs to mmd
-                CONVERSION_FACTORS = {
-                    'cms': -1 / 86400,
-                    'cfs': -35.3146667 / 86400,
-                    'mmd': mmd_scale,
-                }
-
-                # Convert the whole DataFrame to cfs
-                evap_df = pd.concat(
-                    [evap_df.mul(CONVERSION_FACTORS[u]).add_suffix(f'_{u}') for u in units],
-                    axis=1
-                )
-                # sum total evap
-                for unit in units:
-                    unit_cols = evap_df.filter(like=f'_{unit}').columns
-                    evap_df[f'evap_{unit}'] = evap_df[unit_cols].sum(axis=1)
-
-                # merge diversions and evaporation
-                subset_dvrs = pd.merge(left=subset_dvrs, right=evap_df, how='left', left_index=True, right_index=True)
-
-                # add evaporation to Q_CU
-                for unit in units:
-                    subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[f'Q_CU_{unit}'] + subset_dvrs[f'evap_{unit}']
-
-            # 4. merge
-            combined_df = pd.merge(
-                df, 
-                subset_dvrs, 
-                right_index=True,
-                left_index=True, 
-                how='inner'
-            )
-            if len(combined_df) < 1:
-                raise Exception('merge failed: df has no rows')
-
-            # 5. aggregate by type
-                # Aggregate columns matching each diversion type
-            for unit in units:
-                combined_df[f'Q_NAT_{unit}'] = combined_df[f'Q_{unit}'] - combined_df[f'Q_CU_{unit}']
-                
-            ###### return flow proof of concept
-            if 'irrigation_cfs' in combined_df.columns:
-
-                combined_df['irrigation_diversion_cfs'] = combined_df['irrigation_cfs'] / useDict['irrigation'] * -1 # convert CU to diversion
-                combined_df['irrigation_rf_cfs'] = combined_df['irrigation_diversion_cfs'] * (1-useDict['irrigation']*-1)  # convert diversion to return flow
-                # diversion should equal return flow + consumptive use
-                #test = combined_df['irrigation_diversion_cfs'].abs().sum() / (combined_df['irrigation_rf_cfs'].abs().sum() + combined_df['irrigation_cfs'].abs().sum())
-
-                # 1. Define physical aquifer parameters
-                a = 1000.0       # Distance to stream in feet
-                T = 5000.0       # Transmissivity in ft^2/day
-                S = 0.20         # Specific yield
-
-                # 2. Generate Glover response kernel (e.g., 5-year lag window)
-                max_lag_days = 365 * 5
-                t_axis = np.arange(max_lag_days)
-                kernel = glover_unit_response(t_axis, a, T, S)
-
-                # Normalize kernel so total mass sums to 1.0
-                if np.sum(kernel) > 0:
-                    kernel = kernel / np.sum(kernel)
-
-                # 3. Convolve daily unconsumed return flows with the Glover kernel
-                rf_series = combined_df['irrigation_rf_cfs'].fillna(0).values
-                lagged_rf = np.convolve(rf_series, kernel, mode='full')[:len(combined_df)]
-
-                # 4. Compute estimated Natural Streamflow
-                combined_df['lagged_rf_cfs'] = lagged_rf
-                # first undo the previous step which added irrigation CU to create natural flow
-                combined_df['Q_NAT_noag'] = combined_df[f'Q_NAT_cfs'] + combined_df[f'irrigation_cfs']
-                # now subtract diversions and add return flow
-                combined_df['Q_NAT2_cfs'] = combined_df['Q_NAT_noag'] - combined_df['irrigation_diversion_cfs'] + combined_df['lagged_rf_cfs']
-
-                fig, ax = plt.subplots()
-                df2 = combined_df.loc['2015-10-01':'2016-10-01']
-                ax.plot(df2.index, df2['Q_cfs'], label='observed Q')
-                ax.plot(df2.index, df2['lagged_rf_cfs'], label='lagged return flow')
-                ax.plot(df2.index, df2['Q_NAT2_cfs'], label='natural Q', linestyle='--')
-                ax.plot(df2.index, df2['irrigation_cfs'], label='irrigation')
-                ax.plot(df2.index, df2['Q_NAT_cfs'], label='observed + CU Q')
-                ax.legend()
-                plt.show()
-
-            ##### reservoir naturalization proof of concept #####
-            basin = basins[basins.index==gage]
-            # is this basin impacted by a major reservoir(s)?
-            basin_res = gpd.sjoin(basin, reservoir_gdf, how='inner', predicate='intersects')
-            if len(basin_res) > 0:
-                print('processing inflows')
-                # find the largest non-overlapping sub-basins within this basin (use basins gdf)
-                target_geom = basin.geometry.iloc[0]
-                contained_basins = basins[(basins.index != gage) & (basins.centroid.within(target_geom))].copy()
-
-                # find the area of the total watershed covered
-                if not contained_basins.empty:
-
-                    # Sort by area descending so we evaluate larger sub-basins first
-                    contained_basins = contained_basins.sort_values(by='area_m2', ascending=False)
-                    
-                    # 2. Iteratively select non-overlapping sub-basins
-                    selected_subbasins = []
-                    union_geom = None
-                    
-                    for idx, subbasin in contained_basins.iterrows():
-                        geom = subbasin.geometry
-                        # Check if this sub-basin overlaps significantly with already selected ones
-                        if union_geom is None:
-                            selected_subbasins.append(idx)
-                            union_geom = geom
-                        elif not geom.overlaps(union_geom) and not geom.within(union_geom):
-                            # Alternatively, use area intersection check if geometries slightly touch/overlap edges:
-                            if geom.intersection(union_geom).area / geom.area < 0.01:
-                                selected_subbasins.append(idx)
-                                union_geom = union_geom.union(geom)
-
-                    # GeoDataFrame of the largest non-overlapping sub-basins
-                    non_overlapping_gdf = basins.loc[selected_subbasins]
-
-                    subbasins_union = non_overlapping_gdf.unary_union
-                    missing_geom = target_geom.difference(subbasins_union)
-                    missing_area_gdf = gpd.GeoDataFrame({'gage': [gage], 'geometry': [missing_geom]}, crs=basins.crs)
-                    missing_area_gdf.to_file(fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\spatial_data\missing_geometries\{gage}.shp')
-
-                    # 3. Find the area of the total watershed covered
-                    # Expressed in the CRS units (e.g., m² or km² depending on projection)
-                    covered_area = union_geom.area
-                    
-                    # Percentage of the main target basin covered
-                    basin_area = basin.geometry.iloc[0].area
-                    frac_covered = covered_area / basin_area
-                else:
-                    covered_area = 0.0
-                    frac_covered = 0.0
-
-                inflow_gages = non_overlapping_gdf.index.to_list()
-                inflows = pd.DataFrame()
-                for igage in inflow_gages:
-                    idf = os.path.join(appDir, f"{igage}.csv")
-                    idf = pd.read_csv(idf, parse_dates=['date'], index_col='date')
-                    inflows[igage] = idf['Q_NAT2_cfs'] 
-                # sum all the natural inflows
-                inflows['inflow_sum'] = inflows[inflow_gages].sum(axis=1, skipna=False)
-                inflows = inflows[['inflow_sum']].dropna()
-                overlap_dates = inflows.index.intersection(combined_df[['Q_NAT2_cfs']].index)
-
-                # compare total inflow vs total outflow for the period of record
-                frac_in = inflows.loc[overlap_dates]['inflow_sum'].sum() / combined_df.loc[overlap_dates]['Q_NAT2_cfs'].sum()
-                combined_df['frac_inflow'] = frac_in
-                combined_df['frac_gaged_inflow_area'] = frac_covered
-
-                if frac_in < 1:
-                    # assume the unaccounted area had similar temporal behavior, add it back in  
-                    scale = 1+(1-frac_in)
-                    combined_df['Q_NAT2_cfs'] = inflows['inflow_sum'] * scale
-
-                if frac_in > 1: # the reservoir is losing a lot of water to seepage or unaccounted evap. Ignore that.
-                    combined_df['Q_NAT2_cfs'] = inflows['inflow_sum']
-                
-                print(f'inflow gages: {inflow_gages}, frac_in {frac_in}, % basin gaged {frac_covered}')
-                frac_in_cols = ['frac_inflow','frac_gaged_inflow_area']
-
-        else:
-            # If no diversions found, we still save the original flow (or skip)
-            combined_df = df
-        
-        combined_df = combined_df.asfreq('D')
-        # 4. Save the new CSV
-        combined_df.to_csv(out_path, index_label='date')
-
-        # make a smaller df without all the diversions
-        cu_types2 = []
-        cu_types = list(cu_types) + ['evap']
-        for unit in units:
-            for cu_type in cu_types:
-                cu_types2.append(f'{cu_type}_{unit}')
-        columns = [col for col in combined_df.columns if 'Q' in col or col in cu_types2]
-        # I wanna look at frac in
-        columns += frac_in_cols
-        small_df = combined_df[columns]
-        out_path_small = os.path.join(appDir, f"{gage}.csv")
-        small_df.to_csv(out_path_small, index_label='date')
-
-        print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
+def glover_unit_response(t_days, a_ft, T_sqft_day, S):
+    """
+    Calculates the daily fraction of a discrete recharge pulse returning 
+    to the stream at time t using the Glover analytical derivative.
     
+    a_ft        : Distance from field/recharge area to stream (ft)
+    T_sqft_day  : Aquifer Transmissivity (ft^2/day)
+    S           : Specific Yield (dimensionless, e.g., 0.1 to 0.2)
+    """
+    t = np.asarray(t_days, dtype=float)
+    q = np.zeros_like(t)
+    valid = t > 0
+    D = T_sqft_day / S
+    t_v = t[valid]
+    
+    # Instantaneous unit response function q(t)
+    q[valid] = (a_ft / (2 * np.sqrt(np.pi * D * (t_v**3)))) * np.exp(-(a_ft**2) / (4 * D * t_v))
+    return q
 
+reservoir_gdf = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs.parquet").to_crs(epsg=4326)
+reservoir_gdf = reservoir_gdf[reservoir_gdf.areasqkm > 3]
+basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
+gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
+basins = gpd.read_parquet(basins_path)
+basins.geometry = basins.geometry.to_crs(4326) # need this for spatial joins
+gages = gpd.read_parquet(gages_path)
+big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
+flow = pd.read_csv(big_flow_path).set_index('date')
+flow.index = pd.to_datetime(flow.index)
+# fix timeseries index
+flow.index = flow.index.normalize().tz_localize(None)
+# rename columns
+rename_dict = {}
+for usgsgage in flow.columns:
+    gage = fix_gage_id(usgsgage)
+    rename_dict[usgsgage] = gage
+flow = flow.rename(columns=rename_dict)
+# interpolate in the same way you interpolate the in the loop below. This is necessary for data quality check in the inflows calculation
+flow = fill_discharge_data(flow, col_names=flow.columns)
+
+
+name_dict = gages['name'].to_dict()
+date_range = ("1979-10-01", "2025-09-30")
+dvrs = gpd.read_file(os.path.join(ncwd, r"data\diversion\input\ucrb_diversion_master_table.csv"))
+# this code clarifies intrabasin transfers. If the intrabasin tranfer delivers to another subbasin within UCOL,
+# this should be considered a transbasin import for that subbasin. For a large sub-basin that has a intrabasin diversion
+# that delivers somewhere within the basin, the consumptive use of the intrabasin diversion will cancel out with
+# the transbasin import
+dvrs_intra = dvrs[dvrs['siteUse']=='intrabasin'].copy()
+dvrs_intra['siteUse'] = 'transbasin'
+dvrs_intra['origin_decLat'] = dvrs_intra['decLat']
+dvrs_intra['origin_decLong'] = dvrs_intra['decLong']
+dvrs_intra['decLat'] = dvrs_intra['dest_decLat']
+dvrs_intra['decLong'] = dvrs_intra['dest_decLong']
+
+dvrs_intra['siteID'] = dvrs_intra['siteID'].str.replace('intrabasin', 'transbasin')
+dvrs_intra['siteName'] = dvrs_intra['siteName'] + '_delivery_point'
+# add rows for the transbasin
+dvrs = pd.concat([dvrs, dvrs_intra])
+# need to rebuild the geometry after this
+dvrs = df_to_geodataframe(dvrs, lat_col='decLat', lon_col='decLong')
+dvrs.to_parquet(os.path.join(appcwd, r"spatial_data\ucrb_diversion_master_table.parquet"))
+
+# RESERVOIR EVAP
+evap = gpd.read_parquet(r"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\ucol_reservoirs.parquet")
+evap['RES_NAME'] = evap['RES_NAME'].str.replace(' ', '_')
+evap_joined = gpd.sjoin(evap, basins, how="inner", predicate="within")
+
+# WATERSHEDS
+# gageID column = gage
+# WIDE CSV FOR DIVERSION DATA IN CFS
+# COLUMN HEADERS = siteID
+
+# 1980 to 2025
+dvrsFlow = pd.read_csv(os.path.join(ncwd, r"data\diversion\will_processed\combined_diversion_records_filtered_filled_cfs_fill_years.csv"))
+dvrsFlow = dvrsFlow.rename(columns={'datetime':'date'})
+dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
+#dvrsFlow = pd.concat([dvrsFlow, dvrsFlow])
+
+# Ensure date columns are datetime objects for proper merging
+dvrsFlow['date'] = pd.to_datetime(dvrsFlow['date'])
+dvrsFlow = dvrsFlow.set_index('date')
+
+# dvrsFlow doesn't have any "transbasin" flags since we just made them up
+for col in dvrsFlow.columns:
+    if 'intrabasin' in col:
+        trans_dup = col.replace('intrabasin', 'transbasin')
+        dvrsFlow[trans_dup] = dvrsFlow[col]
+
+# OUT DIRECTORY FOR STREAMFLOW WITH DIVERSIONS
+wdvrsDir = os.path.join(ncwd, r'data\timeseries\selected_w_diversion') # has everything
+appDir = os.path.join(appcwd, r'timeseries') # does not have each individual diversion
+
+# 1. Spatial Join: Find which diversions are in which watersheds
+# 'inner' join keeps only points that fall inside a polygon
+# 'within' ensures the point is geometrically inside the watershed boundary
+joined = gpd.sjoin(dvrs, basins, how="inner", predicate="within")
+
+import time
+current_time = time.time()
+seconds_in_1_hours = 60 * 60
+# send to csvs
+basins_subset = ['09211200', '09209400', '09205000', '09188500', '09210500', '09201500', '09196500', '09195000']
+basins_subset = ['09041090', '09041400']
+basins_subset = ['09034250', '09010500', '09014050', '09015000', '09019000', '09019500', '09021000', '09022000', '09024000', '09025000', '09025300', '09026500', '09027100', '09032000', '09032050', '09032100', '09032200', '09032300', '09032400', '09032990', '09033100', '09033300', '401530105475401']
+basins_sub = basins[basins.index.isin(basins_subset)].sort_values('area_m2')
+for gage in basins_sub.index:
+    #gage = '09034250'
+    out_path_small = os.path.join(appDir, f"{gage}.csv")
+    out_path = os.path.join(wdvrsDir, f"{gage}.csv")
+    
+    # # Check if the file exists first
+    # if os.path.exists(out_path_small):
+    #     df = pd.read_csv(out_path_small, parse_dates=['date'], index_col='date')
+    #     df_cleaned = df[~df.index.duplicated(keep='first')]
+    #     df_cleaned = df_cleaned.asfreq('D')
+    #     df_cleaned.to_csv(out_path_small, index_label='date')
+
+    # if os.path.exists(out_path):
+    #     df = pd.read_csv(out_path, parse_dates=['date'], index_col='date')
+    #     df_cleaned = df[~df.index.duplicated(keep='first')]
+    #     df_cleaned = df_cleaned.asfreq('D')
+    #     df_cleaned.to_csv(out_path, index_label='date')
+
+    df = flow[[gage]]
+    df = df.rename(columns={gage:'Q_cms'})
+
+    # INTERPOLATE MISSING Q
+    df = fill_discharge_data(df, col_names=['Q_cms'])
+
+    df['Q_cfs'] = df['Q_cms'] * 35.3147
+    # add area and mmd
+    area = basins[basins.index==gage]['area_m2'].iloc[0]
+    df['Q_mmd'] = (df['Q_cms'] * 86400000) / area
+    df['area_m2'] = area
+    # make sure it's got every day
+    df = df.asfreq('D')
+    # add name and gage as columns
+    df['name'] = name_dict[gage]
+    df['gage'] = gage
+    # filter to 1980 and up
+    df = df[df.index.year>1980].copy()
+    
+    # Identify siteIDs for diversions located in this specific watershed
+    target_diversions = joined[joined['gage'] == gage]['siteID'].unique()
+    target_evaps = evap_joined[evap_joined['gage']==gage]['RES_NAME'].unique()
+    
+    frac_in_cols = []
+    # loop through the diversions
+    if len(target_diversions) > 0:
+
+        # 2. Group the full column names by their base div_id
+        from collections import defaultdict
+        id_groups = defaultdict(list)
+
+        for col in target_diversions:
+            # Extracts 'div_0001' from 'div_0001_intrabasin'
+            base_id = "_".join(col.split("_")[:2]) 
+            id_groups[base_id].append(col)
+
+        # 3. Identify base_ids that contain BOTH 'intrabasin' and 'transbasin'
+        ids_to_remove = set()
+        for base_id, cols in id_groups.items():
+            # Check if any column in this group ends with or contains the specific types
+            has_intra = any('intrabasin' in c for c in cols)
+            has_trans = any('transbasin' in c for c in cols)
+            
+            if has_intra and has_trans:
+                ids_to_remove.add(base_id)
+
+        # 4. Filter them out of your final valid_cols list
+        valid_cols = [
+            col for col in target_diversions 
+            if "_".join(col.split("_")[:2]) not in ids_to_remove
+        ]
+
+        # do it for each unit
+        units = ['cfs', 'mmd', 'cms']
+            
+        if valid_cols:
+            # 1. Extract the raw data
+            subset_dvrs = dvrsFlow[valid_cols].copy()
+            # 2. Convert raw diversions to Consumptive Use (CU)
+            useDict = {
+                'irrigation': -0.6, 'municipal': -0.3, 'interbasin': -1, 
+                'industrial': -1, 'hydropower': 0, 'intrabasin': -1, 'transbasin': 1,
+            }
+
+            # INTERBASIN = all water leaves UCOL
+            # INTRABASIN = water may or may not leave sub-basin. Does not leave UCOL.
+            # TRANSBASIN = water imported from a different sub-basin within UCOL.
+            
+            # aggregate diversions by type
+            cu_types = useDict.keys()
+            for unit in units:
+                # Create a temporary list to hold the names of the new CU columns
+                cu_cols = []
+                for col in valid_cols:
+                    # Determine the multiplier by checking the end of the siteID string
+                    multiplier = 0 # Default if no match is found
+                    for usage, val in useDict.items():
+                        if col.lower().endswith(usage):
+                            multiplier = val
+                            break
+
+                    mmd_scale = 2446575.5461 / area # goes from cfs to mmd
+                    unit_multiplier = {'cfs':1, 'cms':0.0283168, 'mmd':mmd_scale}
+                    # Calculate CU for this specific diversion
+                    cu_col_name = f"{col}_CU_{unit}"
+                    subset_dvrs[cu_col_name] = subset_dvrs[col] * multiplier * unit_multiplier[unit]
+
+                    cu_cols.append(cu_col_name)
+
+                for cu_type in cu_types:
+                    matched_cols = [col for col in cu_cols if f'_{cu_type}_CU_{unit}' in col]
+                    if matched_cols:
+                        subset_dvrs[f'{cu_type}_{unit}'] = subset_dvrs[matched_cols].sum(axis=1)
+                    else:
+                        subset_dvrs[f'{cu_type}_{unit}'] = 0.0
+
+                # 3. Aggregate: Sum all CU columns to get the total impact on the watershed
+                subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[cu_cols].sum(axis=1)
+        
+        # get evaps
+        if len(target_evaps) > 0:
+            dfs = []
+            for res in target_evaps:
+                evap = pd.read_parquet(fr"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\{res}.parquet")
+                evap['date'] = pd.to_datetime(evap['start_date'])
+                evap = evap.set_index('date')
+                evap_col = f'evap_{res}'
+                evap = evap.rename(columns={'E_volume (m3)': evap_col})[[evap_col]]
+                dfs.append(evap)
+        
+            evap_df = pd.concat(dfs, axis=1)
+
+            # convert to negative
+            mmd_scale = (2446575.5461 / area) * -1 # goes from cfs to mmd
+            CONVERSION_FACTORS = {
+                'cms': -1 / 86400,
+                'cfs': -35.3146667 / 86400,
+                'mmd': mmd_scale,
+            }
+
+            # Convert the whole DataFrame to cfs
+            evap_df = pd.concat(
+                [evap_df.mul(CONVERSION_FACTORS[u]).add_suffix(f'_{u}') for u in units],
+                axis=1
+            )
+            # sum total evap
+            for unit in units:
+                unit_cols = evap_df.filter(like=f'_{unit}').columns
+                evap_df[f'evap_{unit}'] = evap_df[unit_cols].sum(axis=1)
+
+            # merge diversions and evaporation
+            subset_dvrs = pd.merge(left=subset_dvrs, right=evap_df, how='left', left_index=True, right_index=True)
+
+            # add evaporation to Q_CU
+            for unit in units:
+                subset_dvrs[f'Q_CU_{unit}'] = subset_dvrs[f'Q_CU_{unit}'] + subset_dvrs[f'evap_{unit}']
+
+        # 4. merge
+        combined_df = pd.merge(
+            df, 
+            subset_dvrs, 
+            right_index=True,
+            left_index=True, 
+            how='inner'
+        )
+        if len(combined_df) < 1:
+            raise Exception('merge failed: df has no rows')
+
+        # 5. aggregate by type
+            # Aggregate columns matching each diversion type
+        for unit in units:
+            combined_df[f'Q_NAT_{unit}'] = combined_df[f'Q_{unit}'] - combined_df[f'Q_CU_{unit}']
+            
+        ###### return flow proof of concept
+        if 'irrigation_cfs' in combined_df.columns:
+
+            combined_df['irrigation_diversion_cfs'] = combined_df['irrigation_cfs'] / useDict['irrigation'] * -1 # convert CU to diversion
+            combined_df['irrigation_rf_cfs'] = combined_df['irrigation_diversion_cfs'] * (1-useDict['irrigation']*-1)  # convert diversion to return flow
+            # diversion should equal return flow + consumptive use
+            #test = combined_df['irrigation_diversion_cfs'].abs().sum() / (combined_df['irrigation_rf_cfs'].abs().sum() + combined_df['irrigation_cfs'].abs().sum())
+
+            # 1. Define physical aquifer parameters
+            a = 1000.0       # Distance to stream in feet
+            T = 5000.0       # Transmissivity in ft^2/day
+            S = 0.20         # Specific yield
+
+            # 2. Generate Glover response kernel (e.g., 5-year lag window)
+            max_lag_days = 365 * 5
+            t_axis = np.arange(max_lag_days)
+            kernel = glover_unit_response(t_axis, a, T, S)
+
+            # Normalize kernel so total mass sums to 1.0
+            if np.sum(kernel) > 0:
+                kernel = kernel / np.sum(kernel)
+
+            # 3. Convolve daily unconsumed return flows with the Glover kernel
+            rf_series = combined_df['irrigation_rf_cfs'].fillna(0).values
+            lagged_rf = np.convolve(rf_series, kernel, mode='full')[:len(combined_df)]
+
+            # 4. Compute estimated Natural Streamflow
+            combined_df['lagged_rf_cfs'] = lagged_rf
+            # first undo the previous step which added irrigation CU to create natural flow
+            combined_df['Q_NAT_noag'] = combined_df[f'Q_NAT_cfs'] + combined_df[f'irrigation_cfs']
+            # now subtract diversions and add return flow
+            combined_df['Q_NAT2_cfs'] = combined_df['Q_NAT_noag'] - combined_df['irrigation_diversion_cfs'] + combined_df['lagged_rf_cfs']
+
+            fig, ax = plt.subplots()
+            df2 = combined_df.loc['2015-10-01':'2016-10-01']
+            ax.plot(df2.index, df2['Q_cfs'], label='observed Q')
+            ax.plot(df2.index, df2['lagged_rf_cfs'], label='lagged return flow')
+            ax.plot(df2.index, df2['Q_NAT2_cfs'], label='natural Q', linestyle='--')
+            ax.plot(df2.index, df2['irrigation_cfs'], label='irrigation')
+            ax.plot(df2.index, df2['Q_NAT_cfs'], label='observed + CU Q')
+            ax.legend()
+            plt.show()
+
+        ##### reservoir naturalization proof of concept #####
+        basin = basins[basins.index==gage]
+        # is this basin impacted by a major reservoir(s)?
+        basin_res = gpd.sjoin(basin, reservoir_gdf, how='inner', predicate='intersects')
+        # does this basin have a decent data record?
+        days = combined_df['Q_cfs'].notna().sum() # need 10 years of data
+        if len(basin_res) > 0 and days > 3650: 
+            print('processing inflows')
+            # find the largest non-overlapping sub-basins within this basin (use basins gdf)
+            target_geom = basin.geometry.iloc[0]
+            contained_basins = basins[(basins.index != gage) & (basins.centroid.within(target_geom))].copy()
+            contained_basins = contained_basins[contained_basins['area_m2'] < area] # using the centroid can put big basins inside small basins
+            # remove basins with bad data: 
+            contained_gages = contained_basins.index.unique().to_list()
+            gages = contained_gages + [gage]
+            flow_subset = flow[gages]
+            flow_subset = flow_subset[flow_subset.index.year > 1999].copy() # I don't care if we are missing a lot of early data
+
+            # Filter mask for rows where the target column is valid (not NA)
+            valid_target_mask = flow_subset[gage].notna()
+            total_valid_target = valid_target_mask.sum()
+
+            # Calculate the overlapping valid percentage for each gauge
+            keep = []
+            for col in contained_gages:
+                common_valid_count = (valid_target_mask & flow_subset[col].notna()).sum()
+                pct_overlap = (
+                    (common_valid_count / total_valid_target) * 100
+                    if total_valid_target > 0
+                    else 0
+                )
+                print(col, pct_overlap)
+                if pct_overlap > 90: # 90% overlap so we don't have cascading nans
+                    keep.append(col)
+                
+            contained_basins = contained_basins[contained_basins.index.isin(keep)]
+            # find the area of the total watershed covered
+            if not contained_basins.empty:
+
+                # Sort by area descending so we evaluate larger sub-basins first
+                contained_basins = contained_basins.sort_values(by='area_m2', ascending=False)
+                
+                # 2. Iteratively select non-overlapping sub-basins
+                selected_subbasins = []
+                union_geom = None
+                
+                for idx, subbasin in contained_basins.iterrows():
+                    geom = subbasin.geometry
+                    # Check if this sub-basin overlaps significantly with already selected ones
+                    if union_geom is None:
+                        selected_subbasins.append(idx)
+                        union_geom = geom
+                    elif not geom.overlaps(union_geom) and not geom.within(union_geom):
+                        # Alternatively, use area intersection check if geometries slightly touch/overlap edges:
+                        if geom.intersection(union_geom).area / geom.area < 0.01:
+                            selected_subbasins.append(idx)
+                            union_geom = union_geom.union(geom)
+
+                # GeoDataFrame of the largest non-overlapping sub-basins
+                non_overlapping_gdf = basins.loc[selected_subbasins]
+
+                subbasins_union = non_overlapping_gdf.unary_union
+                missing_geom = target_geom.difference(subbasins_union)
+                missing_area_gdf = gpd.GeoDataFrame({'gage': [gage], 'geometry': [missing_geom]}, crs=basins.crs)
+                missing_area_gdf.to_file(fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\spatial_data\missing_geometries\{gage}.shp')
+
+                # 3. Find the area of the total watershed covered
+                # Expressed in the CRS units (e.g., m² or km² depending on projection)
+                covered_area = union_geom.area
+                
+                # Percentage of the main target basin covered
+                basin_area = basin.geometry.iloc[0].area
+                frac_covered = covered_area / basin_area
+            else:
+                covered_area = 0.0
+                frac_covered = 0.0
+
+            inflow_gages = non_overlapping_gdf.index.to_list()
+            inflows = pd.DataFrame()
+            for igage in inflow_gages:
+                idf = os.path.join(appDir, f"{igage}.csv")
+                idf = pd.read_csv(idf, parse_dates=['date'], index_col='date')
+                inflows[igage] = idf['Q_NAT2_cfs'] 
+            # sum all the natural inflows
+            inflows['inflow_sum'] = inflows[inflow_gages].sum(axis=1, skipna=False)
+            inflows = inflows[['inflow_sum']].dropna()
+            overlap_dates = inflows.index.intersection(combined_df[['Q_NAT2_cfs']].index)
+
+            # compare total inflow vs total outflow for the period of record
+            frac_in = inflows.loc[overlap_dates]['inflow_sum'].sum() / combined_df.loc[overlap_dates]['Q_NAT2_cfs'].sum()
+            combined_df['frac_inflow'] = frac_in
+            combined_df['frac_gaged_inflow_area'] = frac_covered
+
+            if frac_in < 1:
+                # assume the unaccounted area had similar temporal behavior, add it back in  
+                scale = 1+(1-frac_in)
+                combined_df['Q_NAT2_cfs'] = inflows['inflow_sum'] * scale
+
+            if frac_in > 1: # the reservoir is losing a lot of water to seepage or unaccounted evap. Ignore that.
+                combined_df['Q_NAT2_cfs'] = inflows['inflow_sum']
+            
+            print(f'inflow gages: {inflow_gages}, frac_in {frac_in}, % basin gaged {frac_covered}')
+            frac_in_cols = ['frac_inflow','frac_gaged_inflow_area']
+
+    else:
+        # If no diversions found, we still save the original flow (or skip)
+        combined_df = df
+        combined_df['Q_NAT2_cfs'] = combined_df['Q_cfs']
+        combined_df['Q_NAT_cfs'] = combined_df['Q_cfs']
+    
+    combined_df = combined_df.asfreq('D')
+    # 4. Save the new CSV
+    combined_df.to_csv(out_path, index_label='date')
+
+    # make a smaller df without all the diversions and interpolation
+    cu_types2 = []
+    cu_types = list(cu_types) + ['evap']
+    for unit in units:
+        for cu_type in cu_types:
+            cu_types2.append(f'{cu_type}_{unit}')
+    columns = [col for col in combined_df.columns if 'Q' in col or col in cu_types2]
+    # I wanna look at frac in
+    columns += frac_in_cols
+    small_df = combined_df[columns]
+    out_path_small = os.path.join(appDir, f"{gage}.csv")
+    small_df.to_csv(out_path_small, index_label='date')
+
+    print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
 
 #############
 # Merge with flow with 0 interpolation
@@ -1683,6 +1779,12 @@ res_norm = (rdf['res_area_frac'] - rdf['res_area_frac'].min()) / (rdf['res_area_
 
 # Apply weights (e.g., 0.8 / 0.2 split)
 rdf['reg_score'] = (0.8 * cu_norm) + (0.2 * res_norm)
+
+basin_sum_path = os.path.join(ncwd, 'basin_summarys.parquet')
+rdf.to_parquet(basin_sum_path)
+### skip some steps by reading here
+rdf = pd.read_parquet(basin_sum_path)
+
 
 ################# Nested matrix ##################
 # 1. Ensure a projected CRS for accurate area calculations (reproject if geographic)
