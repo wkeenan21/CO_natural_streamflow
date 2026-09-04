@@ -6,11 +6,13 @@ import os
 import requests
 import pandas as pd
 import geopandas as gpd
+import pynhd
 
 # Define paths and API configuration
-basedir = r'C:\Users\willy\Documents\GitHub\CO_natural_streamflow'
+basedir = r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow' # C:\Users\willy\Documents\GitHub\CO_natural_streamflow
 ucol_path = fr"{basedir}\shiny-app\ucol_natural\spatial_data\UCOL.parquet"
 evap_dir = r"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap"
+spatial_dir = fr"{basedir}\shiny-app\ucol_natural\spatial_data"
 
 # Ensure output directory exists
 os.makedirs(evap_dir, exist_ok=True)
@@ -123,3 +125,39 @@ for idx, row in ucol_reservoirs.iterrows():
         print(f"   Failed to retrieve data for {res_name}")
 
 print("Processing complete!")
+
+### get all reservoirs from nhd
+usbr_ress = gpd.read_parquet(geoparquet_path)
+from pynhd import NHDPlusHR
+
+# 1. Initialize the NHDPlusHR class (High-Resolution NHD)
+nhd = NHDPlusHR(layer="waterbody")
+
+# 2. Query features using your GeoDataFrame's geometry or total bounds
+# ftype 436 = Reservoir (or pass a list like [436, 390] for lakes/reservoirs)
+reservoirs = nhd.bygeom(ucol.geometry.iloc[0], sql_clause="ftype IN (390, 436)")
+
+res_w_name = reservoirs[~reservoirs['gnis_name'].isna()]
+res_w_name['name_lower'] = res_w_name['gnis_name'].str.lower()
+res_w_name[['name_lower', 'geometry', 'OBJECTID']].explore()
+res_only = res_w_name[res_w_name['name_lower'].str.contains('reservoir') | res_w_name['name_lower'].str.contains('lake granby') | res_w_name['name_lower'].str.contains('shadow mountain')]
+
+# add all the usbr ones. if duplicates, take the biggest one
+usbr_ones = res_w_name[res_w_name['name_lower'].isin(usbr_ress['Name'].str.lower())]
+usbr_ones = usbr_ones.sort_values(by=['name_lower', 'areasqkm'], ascending=False)
+res_only = pd.concat([usbr_ones, res_only]).sort_values(by=['name_lower', 'areasqkm'], ascending=False).drop_duplicates(subset='name_lower')
+res_only[['geometry', 'gnis_name', 'areasqkm']].explore()
+
+# make centroids and select columns
+cols = ['geometry', 'nhdplusid', 'gnis_name', 'areasqkm', 'name_lower']
+res_only = res_only[cols]
+
+res_centroids = res_only.copy()
+res_centroids['geometry'] = res_centroids.representative_point()
+# res_centroids = res_only.set_geometry('centroid')
+# res_centroids.drop(columns='geometry', inplace=True)
+# res_centroids.rename(columns={'centroid':'geometry'}, inplace=True)
+
+res_only = res_only[cols]
+res_only.to_parquet(os.path.join(spatial_dir, 'all_UCOL_reservoirs.parquet'))
+res_centroids.to_parquet(os.path.join(spatial_dir, 'all_UCOL_reservoirs_centroids.parquet'))

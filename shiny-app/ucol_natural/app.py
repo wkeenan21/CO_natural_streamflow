@@ -14,7 +14,16 @@ import asyncio
 ucol = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\UCOL.parquet").to_crs(epsg=4326)
 gages = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_gages.parquet").to_crs(epsg=4326)
 basins = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_basins.parquet").to_crs(epsg=4326)
-dvrs = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\ucrb_diversion_master_table.parquet").to_crs(epsg=4326) 
+dvrs = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\ucrb_diversion_master_table.parquet").to_crs(epsg=4326)
+res = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs.parquet").to_crs(epsg=4326)
+res_centroid = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs_centroids.parquet").to_crs(epsg=4326)
+
+# filter reservoirs...
+res = res[res.areasqkm>0.5].copy()
+res_centroid = res_centroid[res_centroid.areasqkm>0.5].copy()
+
+# fix geometry
+res.geometry = res.geometry.make_valid()
 
 # make gage column
 gages['gage'] = gages.index
@@ -91,16 +100,18 @@ with ui.layout_column_wrap(width=1/2):
                 interactive=False,
                 name="Upper Colorado River Basin",
             )
-
+            # style gages and add to map
             gage_style = {"radius": 5, "color": "blue", "fillColor": "grey", "fillOpacity": 0.8, "weight": 1}
             gages_layer = L.GeoData(
                 geo_dataframe=gages,
                 point_style=gage_style,
                 name="Streamflow Gages",
             )
-
+            # style watersheds, diversions, reservoirs
             wshed_style={"color": "blue", "weight": 2, "fillColor": "lightblue", "fillOpacity": 0.25, 'interactive': False}
             diversion_legend_style = {"radius": 4, "fillOpacity": 0.5, "weight": 1, "color": 'gray', 'fillColor':'gray'}
+            res_style={"color": "#e6ab02", "weight": 2, "fillColor": "lightblue", "fillOpacity": 0.25, 'interactive': False}
+            res_c_style = {"radius": 4, "fillOpacity": 0.5, "weight": 1, "color": '#e6ab02'}
 
             m = L.Map(center=(center_lat, center_lon), zoom=6, scroll_wheel_zoom=True, layers=[osm_layer, gages_layer, ucol_layer])
 
@@ -124,6 +135,8 @@ with ui.layout_column_wrap(width=1/2):
                 # Clear existing Watershed and Diversions layers
                 names = list(CU_COLORS.keys())
                 names.append('Active Watershed')
+                names.append('Reservoirs')
+                names.append('Reservoir Centroids')
                 for layer in list(m.layers):
                     if layer.name in names:
                         m.remove_layer(layer)
@@ -131,6 +144,7 @@ with ui.layout_column_wrap(width=1/2):
                 # Watershed Handling
                 selected_basin_df = basins[basins['gage'] == gage]
                 if not selected_basin_df.empty:
+                    print('basin not empty')
                     watershed_layer = L.GeoData(
                         geo_dataframe=selected_basin_df,
                         style=wshed_style,
@@ -140,6 +154,7 @@ with ui.layout_column_wrap(width=1/2):
                     m.add_layer(watershed_layer)
 
                     # Diversions Handling
+                    print('finding diversions')
                     selected_dvrs = gpd.clip(dvrs, selected_basin_df).copy()
                     if not selected_dvrs.empty:
                         for cu_type in selected_dvrs['siteUse'].unique():
@@ -157,6 +172,31 @@ with ui.layout_column_wrap(width=1/2):
                             )
                             diversions_layer.on_click(div_click)
                             m.add_layer(diversions_layer)
+                    print('finding reservoirs...')
+                    # Res handling
+                    selected_ress = gpd.clip(res, selected_basin_df).copy()
+                    selected_ress_c = gpd.clip(res_centroid, selected_basin_df).copy()
+                    print(f'selected_ress = {selected_ress}')
+                    if not selected_ress.empty:
+                        # res polygons
+                        res_layer = L.GeoData(
+                            geo_dataframe=selected_ress,
+                            style=res_style,
+                            interactive=False,
+                            name='Reservoirs'
+                        )
+                        # res centroids
+                        res_c_layer = L.GeoData(
+                            geo_dataframe=selected_ress_c,
+                            point_style={"type": "circle"}, 
+                            style=res_c_style,
+                            interactive=False,
+                            name='Reservoir Centroids'
+                        )
+                        res_c_layer.on_click(res_click)
+                        print('after res selection')
+                        m.add_layer(res_layer)
+                        m.add_layer(res_c_layer)
 
                 m.center = (lat, lon)
 
@@ -168,6 +208,35 @@ with ui.layout_column_wrap(width=1/2):
 
                 props = feature.get("properties", {})
                 point_name = props.get("siteName", "Unknown Location")
+                coords = feature.get("geometry", {}).get("coordinates", [])
+
+                if len(coords) < 2:
+                    return
+
+                lat, lon = coords[1], coords[0]
+
+                for layer in list(m.layers):
+                    if isinstance(layer, L.Popup):
+                        m.remove_layer(layer)
+
+                popup_content = widgets.HTML(
+                    value=f"{point_name}"
+                )
+
+                popup = L.Popup(
+                    location=[lat, lon],
+                    child=popup_content,
+                    close_button=True,
+                    auto_close=True,
+                )
+                m.add_layer(popup)
+
+            def res_click(event=None, feature=None, **kwargs):
+                if not feature or "properties" not in feature:
+                    return
+
+                props = feature.get("properties", {})
+                point_name = props.get("gnis_name", "Unknown Location")
                 coords = feature.get("geometry", {}).get("coordinates", [])
 
                 if len(coords) < 2:
@@ -236,6 +305,10 @@ with ui.layout_column_wrap(width=1/2):
                 <div style="display: flex; align-items: center; margin-top: 4px;">
                     <span style="display: inline-block; width: 16px; height: 12px; border: 2px solid {wshed_style['color']}; background-color: rgba(173, 216, 230, 0.25); margin-right: 8px;"></span>
                     <span>Active Watershed</span>
+                </div>
+                <div style="display: flex; align-items: center; margin-top: 4px;">
+                    <span style="display: inline-block; width: 16px; height: 12px; border: 2px solid {res_style['color']}; background-color: rgba(173, 216, 230, 0.25); margin-right: 8px;"></span>
+                    <span>Reservoir</span>
                 </div>
 
                 <!-- Points -->
@@ -399,7 +472,7 @@ with ui.layout_column_wrap(width=1/2):
                         hovertext=[cu_labels[cu_type]] * len(df)
                     ))
 
-            q_nat = f'Q_NAT_{unit}'
+            q_nat = f'Q_NAT2_{unit}'
             if q_nat in df.columns:
                 fig.add_trace(go.Scatter(
                     x=df['date'], y=df[q_nat], name='observed flow + consumptive use', mode='lines',

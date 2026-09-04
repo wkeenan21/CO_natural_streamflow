@@ -2,7 +2,6 @@ import pickle
 from pathlib import Path
 import os
 import matplotlib.pyplot as plt
-import torch
 import pyarrow
 import yaml
 import os
@@ -13,6 +12,8 @@ import seaborn as sns
 cwd = r'G:\My Drive\natural_streamflow_colab'
 runs = fr'{cwd}\run_dir'
 
+five_unseen = ['09081600', '09266500', '09253000', '09312600', '09223000']
+five_seen = ['09217900', '09123450', '09210500', '383926107593001', '09310700']
 
 # examine a bunch to assess hyperparameters
 resultslist = []
@@ -41,26 +42,34 @@ for epoch in epochs:
 
             # evaluate model performanc3
             nses = []
+            seen_nses = []
+            unseen_nses = []
             for gage in results.keys():
                 nse = results[gage]['1D']['NSE']
                 nses.append(nse)
+                if gage in five_unseen:
+                    unseen_nses.append(nse)
+                else:
+                    seen_nses.append(nse)
             
             medianNSE = np.median(nses)
             meanNSE = np.mean(nses)
             config['medianNSE'] = medianNSE
             config['meanNSE'] = meanNSE
             config['NSEs'] = nses
+            config['seenNSE'] = np.median(seen_nses)
+            config['unseenNSE'] = np.median(unseen_nses)
             resultslist.append(config)
 
-rdf = pd.DataFrame().from_dict(resultslist)
+adf = pd.DataFrame().from_dict(resultslist)
 
 # filter to 30 epochs
-rdf2 = rdf[rdf.epoch=='030']
+adf2 = adf[adf.epoch=='030']
 # view results
 fig, ax = plt.subplots()
 x = 'output_dropout'
-y = 'medianNSE'
-ax.scatter(rdf2[x], rdf2[y])
+y = 'unseenNSE'
+ax.scatter(adf2[x], adf2[y])
 ax.set_xlabel(x)
 ax.set_ylabel(y)
 plt.show()
@@ -72,12 +81,12 @@ x = 'epoch'
 y = 'medianNSE'
 
 # Map each unique hidden_size to a unique color automatically
-unique_sizes = rdf['hidden_size'].unique()
+unique_sizes = adf['hidden_size'].unique()
 colors = plt.cm.tab10.colors  # Color palette
 color_map = {size: colors[i % len(colors)] for i, size in enumerate(unique_sizes)}
 
-for model in rdf.folder.unique():
-    mdf = rdf[rdf.folder == model]
+for model in adf.folder.unique():
+    mdf = adf[adf.folder == model]
     
     # Extract the hidden_size for this specific model
     h_size = mdf['hidden_size'].iloc[0]
@@ -95,16 +104,16 @@ ax.set_ylabel(y)
 plt.show()
 
 
-rdf3 = rdf[['medianNSE', 'meanNSE', 'hidden_size', 'batch_size', 'output_dropout', 'epoch', 'NSEs']].sort_values(by='medianNSE', ascending=False)
+adf3 = adf[['medianNSE', 'meanNSE', 'hidden_size', 'batch_size', 'output_dropout', 'epoch', 'NSEs']].sort_values(by='medianNSE', ascending=False)
 fig, ax = plt.subplots()
-ax.scatter(rdf3.epoch, rdf3.medianNSE)
+ax.scatter(adf3.epoch, adf3.medianNSE)
 ax.set_xlabel('epoch')
 ax.set_ylabel('NSE')
 plt.show()
 
 # examine duplicates to assess reproducability
 
-df = rdf3.copy()
+df = adf3.copy()
 # 1. Create a composite hyperparameter label for grouping
 df['config'] = (
     'H:' + df['hidden_size'].astype(str) + 
@@ -154,13 +163,15 @@ plt.show()
 ######################
 five_unseen = ['09081600', '09266500', '09253000', '09312600', '09223000']
 five_seen = ['09217900', '09123450', '09210500', '383926107593001', '09310700']
+test_gages = ['09081600', '09217900', '09123450', '09312600', '09210500', '09266500', '09223000']
 
 resultslist = []
 epoch = '030'
 period = "test"
 models = {}
+
 for folder in os.listdir(runs):
-    if '_2608_' in folder:
+    if '_0209_' in folder or '_0109_' in folder:
         run_dir = Path(fr"{runs}/{folder}")
 
         try:
@@ -176,33 +187,47 @@ for folder in os.listdir(runs):
         config['folder'] = folder
 
         # evaluate model performance
-        nses = []
-        seen_nses = []
-        unseen_nses = []
+        nses = {}
+        pbiases = {}
+
         for gage in results.keys():
+            # Extract NSE
             nse = results[gage]['1D']['NSE']
-            nses.append(nse)
-            if gage in five_seen:
-                seen_nses.append(nse)
-            elif gage == '09081600':
-                config['crystal'] = nse
+            nses[gage] = nse
+            
+            # Access Q_obs and Q_sim arrays/DataArrays
+            q_obs = results[gage]['1D']['xr']['Q_cfs_obs']
+            q_sim = results[gage]['1D']['xr']['Q_cfs_sim']
+
+            # Calculate Percent Bias (%): positive value indicates overestimation
+            sum_obs = np.sum(q_obs)
+            if sum_obs != 0:
+                pbias = 100 * (np.sum(q_sim - q_obs) / sum_obs)
             else:
-                unseen_nses.append(nse)
+                pbias = np.nan
+            
+            pbiases[gage] = pbias
         
-        medianNSE = np.median(nses)
-        meanNSE = np.mean(nses)
-        config['medianNSE'] = medianNSE
-        config['meanNSE'] = meanNSE
+        # Aggregate NSE stats
+        justnses = list(nses.values())
+        config['medianNSE'] = np.median(justnses)
+        config['meanNSE'] = np.mean(justnses)
         config['NSEs'] = nses
-        config['seenNSE'] = np.median(seen_nses)
-        config['unseenNSE'] = np.median(unseen_nses)
+
+        # Aggregate PBIAS stats
+        justpbiases = [p for p in pbiases.values() if not np.isnan(p)]
+        config['medianPBIAS'] = np.median(justpbiases) if justpbiases else np.nan
+        config['meanPBIAS'] = np.mean(justpbiases) if justpbiases else np.nan
+        config['PBIASes'] = pbiases
+
         resultslist.append(config)
 
-rdf = pd.DataFrame().from_dict(resultslist)
-rdf2 = rdf[['train_basin_file', 'medianNSE', 'meanNSE', 'NSEs', 'seenNSE', 'unseenNSE', 'crystal', 'folder']].copy()
-rdf2['regulation'] = rdf2['train_basin_file'].str.extract(r'(\d+)\.txt$').astype(int)
-
-rdf2.sort_values(by='regulation', inplace=True)
+adf = pd.DataFrame().from_dict(resultslist)
+adf2 = adf[['train_basin_file', 'medianNSE', 'meanNSE', 'NSEs', 'PBIASes', 'meanPBIAS', 'medianPBIAS', 'folder']].copy()
+adf2['regulation'] = adf2['train_basin_file'].str.extract(r'(\d+)\.txt$').astype(int)
+adf2.sort_values(by='regulation', inplace=True)
+adf_noCU = adf2[~adf2.folder.str.contains('wCU')]
+adf_wCU = adf2[adf2.folder.str.contains('wCU')]
 
 def scatter(df, x, y):
     fig, ax = plt.subplots()
@@ -211,10 +236,22 @@ def scatter(df, x, y):
     ax.set_ylabel(y)
     plt.show()
 
-scatter(rdf2, 'regulation', 'crystal')
+scatter(adf_noCU, 'regulation', 'medianPBIAS')
+
+plt.figure(figsize=(8, 5))
+for gage in five_unseen:
+    plt.plot(adf_noCU['regulation'], adf_noCU['NSEs'].apply(lambda x: x.get(gage)), marker='o', label=str(gage))
+
+plt.xlabel('Regulation')
+plt.ylabel('NSE (1 = perfect, <0 = worse than using mean)')
+plt.ylim(-1, 1)
+plt.grid(True)
+plt.legend(title='Gage ID')
+plt.tight_layout()
+plt.show()
 
 
-df_exploded = rdf2.explode('NSEs')
+df_exploded = adf2.explode('NSEs')
 df_exploded['NSEs'] = df_exploded['NSEs'].astype(float)
 
 plt.figure(figsize=(8, 5))
@@ -226,30 +263,33 @@ plt.grid(True, linestyle='--', alpha=0.5, axis='y')
 plt.tight_layout()
 
 
-folder = 'experiment1_2608_184410'
-run_dir = Path(fr"{runs}/{folder}")
-with open(run_dir / period / f"model_epoch{epoch}" / f"{period}_results.p", "rb") as fp:
-    results = pickle.load(fp)
-gage = '09081600'
-Qsim = f'Q_cfs_sim'
-Qobs = 'Q_cfs_obs'
-df = pd.DataFrame()
+for folder in adf2.folder.unique():
+    reg = adf2[adf2.folder==folder]['regulation'].iloc[0]
 
-qobs = results[gage]['1D']['xr'][Qobs]
-qsim = results[gage]['1D']['xr'][Qsim]
-df['date'] = pd.to_datetime(qobs['date'])
-df.index = df['date']
-df[Qobs] = qobs
-df[Qsim] = qsim
+    run_dir = Path(fr"{runs}/{folder}")
+    with open(run_dir / period / f"model_epoch{epoch}" / f"{period}_results.p", "rb") as fp:
+        results = pickle.load(fp)
+    gage = '09081600'
+    Qsim = f'Q_cfs_sim'
+    Qobs = 'Q_cfs_obs'
+    df = pd.DataFrame()
 
-def hydrograph(df, obs, sim, start = '10-01-2024', end = '09-30-2025'):
-    fig, ax = plt.subplots()
-    df = df.loc[start:end]
-    ax.plot(df.index, df[obs], label='Q obs')
-    ax.plot(df.index, df[sim], label='Q sim')
-    ax.set_xlabel('date')
-    ax.set_ylabel('Q')
-    ax.legend()
-    plt.show()
+    qobs = results[gage]['1D']['xr'][Qobs]
+    qsim = results[gage]['1D']['xr'][Qsim]
+    df['date'] = pd.to_datetime(qobs['date'])
+    df.index = df['date']
+    df[Qobs] = qobs
+    df[Qsim] = qsim
 
-hydrograph(df, Qsim, Qobs)
+    def hydrograph(df, obs, sim, start = '10-01-2024', end = '09-30-2025', title='title'):
+        fig, ax = plt.subplots()
+        df = df.loc[start:end]
+        ax.plot(df.index, df[obs], label='Q obs')
+        ax.plot(df.index, df[sim], label='Q sim')
+        ax.set_xlabel('date')
+        ax.set_ylabel('Q')
+        ax.legend()
+        ax.set_title(title)
+        plt.show()
+
+    hydrograph(df, Qobs, Qsim, title=reg)

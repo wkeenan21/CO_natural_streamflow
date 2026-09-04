@@ -1007,8 +1007,28 @@ basins['data'] = rdf['data']
 
 skip2 = False
 if not skip2:
+    def glover_unit_response(t_days, a_ft, T_sqft_day, S):
+        """
+        Calculates the daily fraction of a discrete recharge pulse returning 
+        to the stream at time t using the Glover analytical derivative.
+        
+        a_ft        : Distance from field/recharge area to stream (ft)
+        T_sqft_day  : Aquifer Transmissivity (ft^2/day)
+        S           : Specific Yield (dimensionless, e.g., 0.1 to 0.2)
+        """
+        t = np.asarray(t_days, dtype=float)
+        q = np.zeros_like(t)
+        valid = t > 0
+        D = T_sqft_day / S
+        t_v = t[valid]
+        
+        # Instantaneous unit response function q(t)
+        q[valid] = (a_ft / (2 * np.sqrt(np.pi * D * (t_v**3)))) * np.exp(-(a_ft**2) / (4 * D * t_v))
+        return q
     ###################
     # SKIP STEPS BY READING HERE
+    reservoir_gdf = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs.parquet").to_crs(epsg=4326)
+    reservoir_gdf = reservoir_gdf[reservoir_gdf.areasqkm > 3]
     basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
     gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
     basins = gpd.read_parquet(basins_path)
@@ -1088,8 +1108,11 @@ if not skip2:
     current_time = time.time()
     seconds_in_1_hours = 60 * 60
     # send to csvs
-    for gage in basins.index:
-        #gage = '09315000'
+    basins_subset = ['09211200', '09209400', '09205000', '09188500', '09210500', '09201500', '09196500', '09195000']
+    basins_subset = ['09041090', '09041400']
+    basins_sub = basins[basins.index.isin(basins_subset)].sort_values('area_m2')
+    for gage in basins_sub.index:
+        #gage = '09034250'
         out_path_small = os.path.join(appDir, f"{gage}.csv")
         out_path = os.path.join(wdvrsDir, f"{gage}.csv")
         
@@ -1125,7 +1148,7 @@ if not skip2:
         target_diversions = joined[joined['gage'] == gage]['siteID'].unique()
         target_evaps = evap_joined[evap_joined['gage']==gage]['RES_NAME'].unique()
         
-
+        frac_in_cols = []
         # loop through the diversions
         if len(target_diversions) > 0:
 
@@ -1188,6 +1211,7 @@ if not skip2:
                         # Calculate CU for this specific diversion
                         cu_col_name = f"{col}_CU_{unit}"
                         subset_dvrs[cu_col_name] = subset_dvrs[col] * multiplier * unit_multiplier[unit]
+
                         cu_cols.append(cu_col_name)
 
                     for cu_type in cu_types:
@@ -1253,6 +1277,127 @@ if not skip2:
                 # Aggregate columns matching each diversion type
             for unit in units:
                 combined_df[f'Q_NAT_{unit}'] = combined_df[f'Q_{unit}'] - combined_df[f'Q_CU_{unit}']
+                
+            ###### return flow proof of concept
+            if 'irrigation_cfs' in combined_df.columns:
+
+                combined_df['irrigation_diversion_cfs'] = combined_df['irrigation_cfs'] / useDict['irrigation'] * -1 # convert CU to diversion
+                combined_df['irrigation_rf_cfs'] = combined_df['irrigation_diversion_cfs'] * (1-useDict['irrigation']*-1)  # convert diversion to return flow
+                # diversion should equal return flow + consumptive use
+                #test = combined_df['irrigation_diversion_cfs'].abs().sum() / (combined_df['irrigation_rf_cfs'].abs().sum() + combined_df['irrigation_cfs'].abs().sum())
+
+                # 1. Define physical aquifer parameters
+                a = 1000.0       # Distance to stream in feet
+                T = 5000.0       # Transmissivity in ft^2/day
+                S = 0.20         # Specific yield
+
+                # 2. Generate Glover response kernel (e.g., 5-year lag window)
+                max_lag_days = 365 * 5
+                t_axis = np.arange(max_lag_days)
+                kernel = glover_unit_response(t_axis, a, T, S)
+
+                # Normalize kernel so total mass sums to 1.0
+                if np.sum(kernel) > 0:
+                    kernel = kernel / np.sum(kernel)
+
+                # 3. Convolve daily unconsumed return flows with the Glover kernel
+                rf_series = combined_df['irrigation_rf_cfs'].fillna(0).values
+                lagged_rf = np.convolve(rf_series, kernel, mode='full')[:len(combined_df)]
+
+                # 4. Compute estimated Natural Streamflow
+                combined_df['lagged_rf_cfs'] = lagged_rf
+                # first undo the previous step which added irrigation CU to create natural flow
+                combined_df['Q_NAT_noag'] = combined_df[f'Q_NAT_cfs'] + combined_df[f'irrigation_cfs']
+                # now subtract diversions and add return flow
+                combined_df['Q_NAT2_cfs'] = combined_df['Q_NAT_noag'] - combined_df['irrigation_diversion_cfs'] + combined_df['lagged_rf_cfs']
+
+                fig, ax = plt.subplots()
+                df2 = combined_df.loc['2015-10-01':'2016-10-01']
+                ax.plot(df2.index, df2['Q_cfs'], label='observed Q')
+                ax.plot(df2.index, df2['lagged_rf_cfs'], label='lagged return flow')
+                ax.plot(df2.index, df2['Q_NAT2_cfs'], label='natural Q', linestyle='--')
+                ax.plot(df2.index, df2['irrigation_cfs'], label='irrigation')
+                ax.plot(df2.index, df2['Q_NAT_cfs'], label='observed + CU Q')
+                ax.legend()
+                plt.show()
+
+            ##### reservoir naturalization proof of concept #####
+            basin = basins[basins.index==gage]
+            # is this basin impacted by a major reservoir(s)?
+            basin_res = gpd.sjoin(basin, reservoir_gdf, how='inner', predicate='intersects')
+            if len(basin_res) > 0:
+                print('processing inflows')
+                # find the largest non-overlapping sub-basins within this basin (use basins gdf)
+                target_geom = basin.geometry.iloc[0]
+                contained_basins = basins[(basins.index != gage) & (basins.centroid.within(target_geom))].copy()
+
+                # find the area of the total watershed covered
+                if not contained_basins.empty:
+
+                    # Sort by area descending so we evaluate larger sub-basins first
+                    contained_basins = contained_basins.sort_values(by='area_m2', ascending=False)
+                    
+                    # 2. Iteratively select non-overlapping sub-basins
+                    selected_subbasins = []
+                    union_geom = None
+                    
+                    for idx, subbasin in contained_basins.iterrows():
+                        geom = subbasin.geometry
+                        # Check if this sub-basin overlaps significantly with already selected ones
+                        if union_geom is None:
+                            selected_subbasins.append(idx)
+                            union_geom = geom
+                        elif not geom.overlaps(union_geom) and not geom.within(union_geom):
+                            # Alternatively, use area intersection check if geometries slightly touch/overlap edges:
+                            if geom.intersection(union_geom).area / geom.area < 0.01:
+                                selected_subbasins.append(idx)
+                                union_geom = union_geom.union(geom)
+
+                    # GeoDataFrame of the largest non-overlapping sub-basins
+                    non_overlapping_gdf = basins.loc[selected_subbasins]
+
+                    subbasins_union = non_overlapping_gdf.unary_union
+                    missing_geom = target_geom.difference(subbasins_union)
+                    missing_area_gdf = gpd.GeoDataFrame({'gage': [gage], 'geometry': [missing_geom]}, crs=basins.crs)
+                    missing_area_gdf.to_file(fr'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\spatial_data\missing_geometries\{gage}.shp')
+
+                    # 3. Find the area of the total watershed covered
+                    # Expressed in the CRS units (e.g., m² or km² depending on projection)
+                    covered_area = union_geom.area
+                    
+                    # Percentage of the main target basin covered
+                    basin_area = basin.geometry.iloc[0].area
+                    frac_covered = covered_area / basin_area
+                else:
+                    covered_area = 0.0
+                    frac_covered = 0.0
+
+                inflow_gages = non_overlapping_gdf.index.to_list()
+                inflows = pd.DataFrame()
+                for igage in inflow_gages:
+                    idf = os.path.join(appDir, f"{igage}.csv")
+                    idf = pd.read_csv(idf, parse_dates=['date'], index_col='date')
+                    inflows[igage] = idf['Q_NAT2_cfs'] 
+                # sum all the natural inflows
+                inflows['inflow_sum'] = inflows[inflow_gages].sum(axis=1, skipna=False)
+                inflows = inflows[['inflow_sum']].dropna()
+                overlap_dates = inflows.index.intersection(combined_df[['Q_NAT2_cfs']].index)
+
+                # compare total inflow vs total outflow for the period of record
+                frac_in = inflows.loc[overlap_dates]['inflow_sum'].sum() / combined_df.loc[overlap_dates]['Q_NAT2_cfs'].sum()
+                combined_df['frac_inflow'] = frac_in
+                combined_df['frac_gaged_inflow_area'] = frac_covered
+
+                if frac_in < 1:
+                    # assume the unaccounted area had similar temporal behavior, add it back in  
+                    scale = 1+(1-frac_in)
+                    combined_df['Q_NAT2_cfs'] = inflows['inflow_sum'] * scale
+
+                if frac_in > 1: # the reservoir is losing a lot of water to seepage or unaccounted evap. Ignore that.
+                    combined_df['Q_NAT2_cfs'] = inflows['inflow_sum']
+                
+                print(f'inflow gages: {inflow_gages}, frac_in {frac_in}, % basin gaged {frac_covered}')
+                frac_in_cols = ['frac_inflow','frac_gaged_inflow_area']
 
         else:
             # If no diversions found, we still save the original flow (or skip)
@@ -1268,8 +1413,9 @@ if not skip2:
         for unit in units:
             for cu_type in cu_types:
                 cu_types2.append(f'{cu_type}_{unit}')
-
         columns = [col for col in combined_df.columns if 'Q' in col or col in cu_types2]
+        # I wanna look at frac in
+        columns += frac_in_cols
         small_df = combined_df[columns]
         out_path_small = os.path.join(appDir, f"{gage}.csv")
         small_df.to_csv(out_path_small, index_label='date')
@@ -1334,6 +1480,20 @@ attrs = pd.read_csv(attrs_path)
 attrs.rename(columns={'gauge_id':'gage'}, inplace=True)
 attrs['gage'] = attrs['gage'].apply(fix_gage_id)
 attrs = attrs.set_index('gage')
+
+# get reservoirs
+res = gpd.read_parquet(os.path.join(appcwd, fr'spatial_data/all_UCOL_reservoirs.parquet')).to_crs(basins.crs)
+res['gt_05'] = res['areasqkm'] > 0.5
+joined = gpd.sjoin(basins, res[["areasqkm", "gt_05", "geometry"]], how="left", predicate="intersects")
+# Group by the joined index (which matches the original basins index)
+agg_df = joined.groupby(joined.index).agg(reservoirs=("areasqkm", "count"), res_sqkm=("areasqkm", "sum"), res_gt_05=("gt_05", "sum"))
+# Assign the calculated totals back to the original basins GeoDataFrame
+basins[["reservoirs", "res_sqkm", "res_gt_05"]] = agg_df[["reservoirs", "res_sqkm", "res_gt_05"]]
+# Fill NaN values for basins that contain no reservoirs
+basins["reservoirs"] = basins["reservoirs"].fillna(0).astype(int)
+basins["res_sqkm"] = basins["res_sqkm"].fillna(0.0)
+basins["res_gt_05"] = basins["res_gt_05"].fillna(0).astype(int)
+basins.sort_values(by='area_km2', inplace=True)
 
 # add names to attrs
 attrs['name'] = basins.name
@@ -1486,9 +1646,12 @@ for gage in basins.index.to_list():
 
 rdf = pd.DataFrame().from_dict(results)
 
-# marge with the geometry and area
+# marge with other attributes
 rdf = rdf.set_index('gage')
 rdf = pd.merge(left=basins, right=rdf, left_index=True, right_index=True)
+# recalculate area
+rdf['area_m2'] = rdf.area
+rdf['area_km2'] = rdf['area_m2'] * 10E-6
 # merge with the attributes
 attrs = pd.read_parquet(os.path.join(appcwd, r'attributes\all_UCOL_attributes.parquet'))
 attrs_vars = ['dor_pc_pva', 'rev_mc_usu', 'dis_m3_pyr']
@@ -1507,8 +1670,19 @@ damstorage = 106200 * 43559.9 # acre feet storage to cubic feet
 dor = damstorage / meanq
 rdf['dor_pc_pva'] = np.where(rdf.index==tp, dor, rdf['dor_pc_pva'])
 
+# calculate the fraction of watershed area covered by reservoirs
+rdf['res_area_frac'] = rdf['res_sqkm'] / rdf['area_km2']
+# fix nas
+rdf['cu_frac'] = rdf['cu_frac'].fillna(0)
+rdf['dor_pc_pva'] = rdf['dor_pc_pva'].fillna(0)
+
 # add a score for regulation
-rdf['reg_score'] = rdf['cu_frac'].fillna(0) + rdf['dor_pc_pva'].fillna(0)
+# Normalize values strictly between 0 and 1
+cu_norm = (rdf['cu_frac'] - rdf['cu_frac'].min()) / (rdf['cu_frac'].max() - rdf['cu_frac'].min())
+res_norm = (rdf['res_area_frac'] - rdf['res_area_frac'].min()) / (rdf['res_area_frac'].max() - rdf['res_area_frac'].min())
+
+# Apply weights (e.g., 0.8 / 0.2 split)
+rdf['reg_score'] = (0.8 * cu_norm) + (0.2 * res_norm)
 
 ################# Nested matrix ##################
 # 1. Ensure a projected CRS for accurate area calculations (reproject if geographic)
@@ -1607,39 +1781,42 @@ nesting_counts = nested_matrix.sum(axis=1) - nested_matrix.values.diagonal().ast
 rdf['nesting_degree'] = rdf.index.map(nesting_counts)
 
 # Filter pristine watersheds
-pristine_pool = rdf[(rdf['cu_frac'] == 0) & (rdf['dor_pc_pva'] == 0)].copy()
+pristine_pool = rdf[(rdf['reg_score'] == 0)].copy()
 
 # Sort pristine pool: prioritize large area (descending) and low nesting degree (ascending)
 pristine_pool = pristine_pool.sort_values(
     by=['nesting_degree'], 
     ascending=[True]
 )
-
+print(f'pristine basins: {len(pristine_pool)}')
 pristine_pool.iloc[0:15][['name', 'geometry']].explore()
 # # Mannually pick the test set
 # for gage in pristine_pool.iloc[0:15].index:
 #     df = pd.read_csv(os.path.join(appDir, f'{gage}.csv'), parse_dates=['date'], index_col='date')
 #     plot_hydrograph(df, 'Q_cfs', gage)
 
-test_gages = [
-    '09266500', 
-    '09210500', 
-    '09223000', 
-    '09312600',
-    '09310700', 
-    '09253000', 
-    '383926107593001', 
-    '09123450', 
-    '09217900',
-    '09081600']
+# experiment 1 test gages
+# test_gages = [
+#     '09266500', 
+#     '09210500', 
+#     '09223000', 
+#     '09312600',
+#     '09310700', 
+#     '09253000', # slater
+#     '383926107593001', 
+#     '09123450', 
+#     '09217900',
+#     '09081600']
 
+test_gages = ['09081600', '09217900', '09123450', '09312600', '09210500', '09266500', '09223000']
 test_set = rdf[rdf.index.isin(test_gages)].copy()
-target_mean_area = test_set['area_km2'].mean()
+target_mean_area = test_set['area_km2'].median()
+target_mean_Q = test_set['Q_cfs_mean'].median()
 
 print(f"=== TEST SET SELECTED ({len(test_set)} gages) ===")
-print(f"Mean Area: {target_mean_area:.2f} km²")
+print(f"Mean Area: {target_mean_area:.2f} km², mean Q: {target_mean_Q:.2f}")
 print(test_set['name'])
-
+test_set[['name', 'geometry']].explore()
 # ==========================================
 # 4. EXCLUDE TEST GAGES & ALL NESTED RELATIVES
 # ==========================================
@@ -1656,7 +1833,8 @@ print(f"Eligible Training Watersheds: {len(train_eligible_rdf)}")
 
 # Pristine watersheds excluding test set and any watersheds nested with test set
 pristine_pool_rm = pristine_pool[~pristine_pool.index.isin(blocked_gages)].copy()
-print(f'pristine options left {len(pristine_pool_rm)}')
+# print(f'pristine options left {len(pristine_pool_rm)}')
+# print(f"pristine mean Q: {pristine_pool_rm['Q_cfs_mean'].mean()}, mean area {pristine_pool_rm['area_km2'].mean()}")
 
 # Pool of all candidate modified watersheds
 modified_pool = train_eligible_rdf[rdf['reg_score'] > 0].copy()
@@ -1679,7 +1857,7 @@ def calc_distance(df1, df2):
 training_sets = {}
 
 # add 5 of the testing gages back to every training set.
-five_unseen = ['09081600', '09266500', '09253000', '09312600', '09223000']
+five_unseen = test_gages # ['09081600', '09266500', '09253000', '09312600', '09223000']
 five_seen = list(set(test_gages) - set(five_unseen))
 five_seen_df = test_set[test_set.index.isin(five_seen)]
 
@@ -1690,12 +1868,29 @@ train_df = pd.concat([train_df, five_seen_df]) # add 5 back
 train_df['set'] = 0
 training_sets['train_set_0'] = train_df
 
+train_set0 = training_sets['train_set_0']
+train_set0[['geometry', 'name']].explore()
+
 used_modified_gages = set()
 
 NUM_STEPS = 10
-REPLACEMENTS_PER_STEP = 5
+REPLACEMENTS_PER_STEP = 10
 
-for step in range(1, NUM_STEPS + 1):
+print(f"TEST SET: Mean Area: {target_mean_area:.2f} km², mean Q: {target_mean_Q:.2f}")
+for step in range(0, NUM_STEPS + 1):
+
+    if step == 0:
+        num_pristine = (train_df['reg_score'] == 0).sum()
+        num_mod = len(train_df) - num_pristine
+        mean_q_val = train_df['Q_cfs_mean'].median()
+        mean_a_val = train_df['area_km2'].median()
+        mean_reg = train_df['reg_score'].median()
+        days = int(train_df['period'].sum())
+        
+        print(f"Train Set {step:02d} | Pristine: {num_pristine:02d} | Modified: {num_mod:02d} | Days: {days} | "
+            f"Mean Reg Score: {mean_reg:.3f} | Mean Q: {mean_q_val:.1f} cfs | Mean Area: {mean_a_val:.1f} km²")
+        continue
+
     replacements_made = 0
     
     # Identify internal nesting conflicts within current_gages
@@ -1763,15 +1958,25 @@ for step in range(1, NUM_STEPS + 1):
     # Logging
     num_pristine = (train_df['reg_score'] == 0).sum()
     num_mod = len(train_df) - num_pristine
-    mean_q_val = train_df['Q_cfs_mean'].mean()
-    mean_a_val = train_df['area_km2'].mean()
-    mean_reg = train_df['reg_score'].mean()
+    mean_q_val = train_df['Q_cfs_mean'].median()
+    mean_a_val = train_df['area_km2'].median()
+    mean_reg = train_df['reg_score'].median()
     days = int(train_df['period'].sum())
     
     print(f"Train Set {step:02d} | Pristine: {num_pristine:02d} | Modified: {num_mod:02d} | Days: {days} | "
           f"Mean Reg Score: {mean_reg:.3f} | Mean Q: {mean_q_val:.1f} cfs | Mean Area: {mean_a_val:.1f} km²")
 
-set10 = training_sets['train_set_1']
+og = set(training_sets['train_set_0']['name'])
+for i in range(1,11):
+    print(i)
+    cg = set(training_sets[f'train_set_{i}']['name'])
+    added = cg.difference(og)
+    subtracted = og.difference(cg)
+    print(f'added: {added}')
+    print(f'subtracted: {subtracted}')
+    og = cg
+
+set10 = training_sets['train_set_8']
 set10[['name', 'geometry']].explore()
 
 ################
@@ -1781,7 +1986,7 @@ import yaml
 import pickle
 
 # define paths
-experiment = 1
+experiment = 2
 ccwd = fr'/content/drive/MyDrive/natural_streamflow_colab/configs/experiment{experiment}' # how to write file paths so Collab can read them
 pcwd = fr'G:\My Drive\natural_streamflow_colab\configs\experiment{experiment}\pickles' # where to save the pickles
 gcwd = fr'G:\My Drive\natural_streamflow_colab\configs\experiment{experiment}' # where to save the configs
@@ -1886,9 +2091,19 @@ for i in range(11):
         print(testpb)
 
     # Save modified configuration to new YAML file
-    config_path = os.path.join(gcwd, f'config_{key}.yml')
+    config_path = os.path.join(gcwd, f'configs/config_{key}.yml')
     with open(config_path, 'w') as f:
         yaml.safe_dump(config_data, f, default_flow_style=False)
+
+    # Add Consumptive Use predictors and create new yaml
+    inputs = config_data['dynamic_inputs']
+    inputs = inputs + ['Q_CU_cfs']
+    config_data['dynamic_inputs'] = inputs
+    config_data['experiment_name'] = f'experiment{experiment}_wCU'
+    config_path = os.path.join(gcwd, f'configs/config_wCU_{key}.yml')
+    with open(config_path, 'w') as f:
+        yaml.safe_dump(config_data, f, default_flow_style=False)
+
 
 # Prep for tuning
 tcwd = fr'G:\My Drive\natural_streamflow_colab\configs\tuning'
