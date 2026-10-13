@@ -9,6 +9,7 @@ from shinywidgets import render_widget
 import ipywidgets as widgets
 import numpy as np
 import asyncio
+import shinyswatch
 
 # 1. Load data
 ucol = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\UCOL.parquet").to_crs(epsg=4326)
@@ -59,9 +60,16 @@ search_error_msg = reactive.Value("")
 
 # 2. Setup Page Layout
 ui.page_opts(title=ui.div(
-        "Upper Colorado River Basin Streamflow, Diversions, and Consumptive Use",
-        style="text-align: center; width: 100%; font-size: 1.4rem; font-weight: 700;"
-    ), fillable=True)
+        ui.div(
+            "Upper Colorado River Basin Naturalized Streamflow",
+            style="font-size: 1.4rem; font-weight: 700; line-height: 1.2;"
+        ),
+        ui.div(
+            "Author: Will Keenan",
+            style="font-size: 0.75rem; font-weight: 400; color: #666666; margin-top: 2px;"
+        ),
+        style="text-align: left; width: 100%;"
+    ), fillable=True, theme=shinyswatch.theme.solar)
 
 with ui.layout_column_wrap(width=1/2):
     
@@ -131,6 +139,9 @@ with ui.layout_column_wrap(width=1/2):
                 lat, lon = row.geometry.y, row.geometry.x
 
                 selected_gage.set({"gage": gage, "name": name})
+
+                if input.gage_search_id() != str(gage):
+                    ui.update_selectize("gage_search_id", selected=str(gage))
 
                 # Clear existing Watershed and Diversions layers
                 names = list(CU_COLORS.keys())
@@ -282,7 +293,7 @@ with ui.layout_column_wrap(width=1/2):
             for control in list(m.controls):
                 print('control:', control)
 
-# HTML content representing each layer's style
+            # HTML content representing each layer's style
             legend_html = f"""
             <div style="
                 background-color: white; 
@@ -333,27 +344,27 @@ with ui.layout_column_wrap(width=1/2):
             return m
     # RIGHT PANEL: Date, Units, Plot & Export
     with ui.card():
-        ui.card_header("Streamflow and Consumptive Use Timeseries")
+        #ui.card_header("Streamflow and Consumptive Use Timeseries")
         
-        with ui.div(style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 10px;"):
-            with ui.div(style="display: flex; gap: 15px; flex-grow: 1;"):
+        with ui.div(style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1px; margin-bottom: 1px;"):
+            with ui.div(style="display: flex; gap: 1px; flex-grow: 1;"):
                 ui.input_date_range(
                     "date_range", 
                     "Select Date Range:", 
-                    start="2021-10-01", 
-                    end="2022-09-30"
+                    start="2015-10-01", 
+                    end="2020-09-30"
                 )
                 
-                ui.input_select(
-                    "units", 
-                    "Select Flow Units:", 
-                    choices={"cfs": "cfs", "cms": "cms", "mmd": "mmd (millimeters / day)"},
-                    selected="cfs"
-                )
+                # ui.input_select(
+                #     "units", 
+                #     "Select Flow Units:", 
+                #     choices={"cfs": "cfs", "cms": "cms", "mmd": "mmd (millimeters / day)"},
+                #     selected="cfs"
+                # )
             
-            with ui.div(style="margin-top: 24px;"):
+            with ui.div(style="margin-top: 1px;"):
                 @render.download_button(
-                    label="Export CSV", 
+                    label="Download", 
                     filename=lambda: f"USGS-{selected_gage.get()['gage'] if selected_gage.get() else 'data'}_extracted.csv"
                 )
                 async def download_data():
@@ -366,7 +377,8 @@ with ui.layout_column_wrap(width=1/2):
         @reactive.calc
         def get_filtered_data():
             gage_info = selected_gage.get()
-            unit_choice = input.units()
+            #unit_choice = input.units()
+            unit_choice = 'cfs'
             start_date, end_date = input.date_range()
 
             if gage_info is None:
@@ -407,7 +419,7 @@ with ui.layout_column_wrap(width=1/2):
         @render_widget
         def plot_flows():
             gage_info = selected_gage.get()
-            unit = input.units()
+            unit = 'cfs' #unit = input.units()
             
             if gage_info is None:
                 fig = go.Figure()
@@ -426,7 +438,7 @@ with ui.layout_column_wrap(width=1/2):
             if df.empty:
                 fig = go.Figure()
                 fig.add_annotation(
-                    text=f"No data for these dates at this stream gage. First date with flow data: {valid_range[0]}. Last date with flow data: {valid_range[1]}",
+                    text=f"No data for these dates. Period of record: {valid_range[0]} - {valid_range[1]}",
                     xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False,
                     font=dict(size=14, color="gray")
                 )
@@ -472,13 +484,35 @@ with ui.layout_column_wrap(width=1/2):
                         hovertext=[cu_labels[cu_type]] * len(df)
                     ))
 
-            q_nat = f'Q_NAT2_{unit}'
-            if q_nat in df.columns:
+            q_nat2 = f'Q_NAT2_{unit}'
+            if q_nat2 in df.columns:
                 fig.add_trace(go.Scatter(
-                    x=df['date'], y=df[q_nat], name='observed flow + consumptive use', mode='lines',
+                    x=df['date'], y=df[q_nat2], name='estimated natural flow', mode='lines',
                     line=dict(color='forestgreen', width=2),
-                    hovertemplate='<b>observed flow + consumptive use</b><br> %{y:.1f} ' + unit + '<extra></extra>'
+                    hovertemplate='<b>estimated natural flow</b><br> %{y:.1f} ' + unit + '<extra></extra>'
                 ))
+                if np.all(df[q_nat2].isna()):
+                    subtitle=dict(text='NOTE: Not enough data for naturalization at this gage', font=dict(size=12))
+                else:
+                    subtitle=dict()
+            
+            q_nat = f'Q_NAT_{unit}'
+            # if q_nat2 in df.columns:
+            #     fig.add_trace(go.Scatter(
+            #         x=df['date'], y=df[q_nat], name='observed flow + consumptive use', mode='lines',
+            #         line=dict(color='mediumseagreen', width=2, dash='dash'),
+            #         hovertemplate='<b>observed flow + consumptive use</b><br> %{y:.1f} ' + unit + '<extra></extra>'
+            #     ))
+
+            q_nat_usbr = f'Q_NATUSBR_{unit}'
+            if q_nat_usbr in df.columns:
+                usbr_test = df[q_nat_usbr].notna().any()
+                if usbr_test:
+                    fig.add_trace(go.Scatter(
+                        x=df['date'], y=df[q_nat_usbr], name='USBR Estimated Natural Flow', mode='lines',
+                        line=dict(color='black', width=2, dash='dash'),
+                        hovertemplate='<b>USBR Natural Flow</b><br> %{y:.1f} ' + unit + '<extra></extra>'
+                    ))
 
             q_obs = f'Q_{unit}'
             if q_obs in df.columns:
@@ -489,24 +523,25 @@ with ui.layout_column_wrap(width=1/2):
                 ))
             
             # check for negative natural flows
-            if q_nat in df.columns:
-                negQ = np.any(df[q_nat] < 0)
-                if negQ:
-                    subtitle=dict(text='NOTE: Water imports and subsequent dam storage may produce negative observed flow + consumptive use', font=dict(size=12))
-                else:
-                    subtitle=dict()
-            else:
-                subtitle=dict()
+            # if q_nat in df.columns:
+            #     negQ = np.any(df[q_nat] < 0)
+            #     if negQ:
+            #         subtitle=dict(text='NOTE: Water imports and subsequent dam storage may produce negative observed flow + consumptive use', font=dict(size=12))
+            #     else:
+            #         subtitle=dict()
+            # else:
+            #     subtitle=dict()
 
             fig.update_layout(
-                title=dict(text=f'{name} (USGS-{gage}), Period of record {valid_range[0]} to {valid_range[1]}', font=dict(size=16), subtitle=subtitle),
-                xaxis=dict(title='Date', showgrid=True, gridcolor='#f0f0f0'),
+                title=dict(text=f'{name} (USGS-{gage})', font=dict(size=16), subtitle=subtitle), #, Period of record {valid_range[0]} to {valid_range[1]}
+                xaxis=dict(title='Date', showgrid=True, gridcolor='#f0f0f0', automargin=True),
                 yaxis=dict(title=f'Streamflow ({unit})', showgrid=True, gridcolor='#f0f0f0'),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
+                #legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
                 margin=dict(l=40, r=40, t=40, b=40),
                 xaxis_type='date',
                 hovermode="x unified",
-                template="plotly_white"
+                template="plotly_white",
+                showlegend=False
             )
             # go again
             return fig
