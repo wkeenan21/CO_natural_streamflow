@@ -230,5 +230,11 @@ print(f"Done in {time.time() - start_time:.2f} seconds!")
 print("\nDistance Matrix (Kilometers):")
 print(np.round(dist_matrix_km, 3))
 
-# Save output
-np.savetxt("gage_stream_distances_km.csv", dist_matrix_km, delimiter=",")
+import pandas as pd
+
+# Convert to Pandas DataFrame using the gage indices
+df_dist = pd.DataFrame(
+    dist_matrix_km, index=gages.index, columns=gages.index
+)
+
+df_dist.to_csv(os.path.join(ncwd, 'dist_matrix.csv'))

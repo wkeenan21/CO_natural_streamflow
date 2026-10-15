@@ -155,7 +155,6 @@ with ui.layout_column_wrap(width=1/2):
                 # Watershed Handling
                 selected_basin_df = basins[basins['gage'] == gage]
                 if not selected_basin_df.empty:
-                    print('basin not empty')
                     watershed_layer = L.GeoData(
                         geo_dataframe=selected_basin_df,
                         style=wshed_style,
@@ -165,7 +164,6 @@ with ui.layout_column_wrap(width=1/2):
                     m.add_layer(watershed_layer)
 
                     # Diversions Handling
-                    print('finding diversions')
                     selected_dvrs = gpd.clip(dvrs, selected_basin_df).copy()
                     if not selected_dvrs.empty:
                         for cu_type in selected_dvrs['siteUse'].unique():
@@ -183,11 +181,11 @@ with ui.layout_column_wrap(width=1/2):
                             )
                             diversions_layer.on_click(div_click)
                             m.add_layer(diversions_layer)
-                    print('finding reservoirs...')
+
                     # Res handling
                     selected_ress = gpd.clip(res, selected_basin_df).copy()
                     selected_ress_c = gpd.clip(res_centroid, selected_basin_df).copy()
-                    print(f'selected_ress = {selected_ress}')
+
                     if not selected_ress.empty:
                         # res polygons
                         res_layer = L.GeoData(
@@ -205,7 +203,6 @@ with ui.layout_column_wrap(width=1/2):
                             name='Reservoir Centroids'
                         )
                         res_c_layer.on_click(res_click)
-                        print('after res selection')
                         m.add_layer(res_layer)
                         m.add_layer(res_c_layer)
 
@@ -287,11 +284,6 @@ with ui.layout_column_wrap(width=1/2):
                 gage_id = input.gage_search_id()
                 if gage_id:
                     select_gage_by_id(gage_id)
-
-            for layer in list(m.layers):
-                print('layer:', layer.name)
-            for control in list(m.controls):
-                print('control:', control)
 
             # HTML content representing each layer's style
             legend_html = f"""
@@ -389,6 +381,7 @@ with ui.layout_column_wrap(width=1/2):
                 return None
 
             df = pd.read_csv(csv_path)
+            print(df.columns)
             df['date'] = pd.to_datetime(df['date'])
             df.index = df['date']
 
@@ -495,14 +488,6 @@ with ui.layout_column_wrap(width=1/2):
                     subtitle=dict(text='NOTE: Not enough data for naturalization at this gage', font=dict(size=12))
                 else:
                     subtitle=dict()
-            
-            q_nat = f'Q_NAT_{unit}'
-            # if q_nat2 in df.columns:
-            #     fig.add_trace(go.Scatter(
-            #         x=df['date'], y=df[q_nat], name='observed flow + consumptive use', mode='lines',
-            #         line=dict(color='mediumseagreen', width=2, dash='dash'),
-            #         hovertemplate='<b>observed flow + consumptive use</b><br> %{y:.1f} ' + unit + '<extra></extra>'
-            #     ))
 
             q_nat_usbr = f'Q_NATUSBR_{unit}'
             if q_nat_usbr in df.columns:
@@ -514,7 +499,8 @@ with ui.layout_column_wrap(width=1/2):
                         hovertemplate='<b>USBR Natural Flow</b><br> %{y:.1f} ' + unit + '<extra></extra>'
                     ))
 
-            q_obs = f'Q_{unit}'
+            q_obs = f'Q_unfilled_{unit}'
+            #print(df.columns)
             if q_obs in df.columns:
                 fig.add_trace(go.Scatter(
                     x=df['date'], y=df[q_obs], name='observed flow', mode='lines',

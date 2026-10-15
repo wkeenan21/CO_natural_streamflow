@@ -15,6 +15,7 @@ import rasterio
 os.environ["API_USGS_PAT"] = "ePZbH4mtoakm2VYSZDE78clCxGDmKxRWd7nWYzpt"
 from dataretrieval import waterdata
 import pyarrow
+from collections import defaultdict
 
 ###############
 # 1 download DEM (R script) # don't need, can just grab basins from NLDI
@@ -546,17 +547,16 @@ if not skip:
     #############################################################################
     # GET STREAMFLOW AND MERGE DIVERSION DATA
     #############################################################################
-    from collections import defaultdict
 
     # make dict for names
     name_dict = gages.set_index('gage')['name'].to_dict()
     # Get all streamflow
-    date_range = ("1979-10-01", "2025-09-30")
-    #flow = NWIS.get_streamflow(gages['gage'].to_list(), date_range, freq="dv") # comes in cubic meters per second
+    date_range = ("1979-10-01", "2026-09-30")
+    flow = NWIS.get_streamflow(gages.index.to_list(), date_range, freq="dv") # comes in cubic meters per second
 
     # send to csv so you don't have to run that again
     big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
-    #flow.to_csv(big_flow_path, index_label='date')
+    flow.to_csv(big_flow_path, index_label='date')
     flow = pd.read_csv(big_flow_path).set_index('date')
     flow.index = pd.to_datetime(flow.index)
 
@@ -1168,6 +1168,117 @@ def mass_balance_compare(s1: pd.Series, s2: pd.Series) -> float:
 
     return s1_valid.sum() / sum_s2
 
+
+def route_streamflow_muskingum_cfs(s_cfs, upstream_gage, downstream_gage, dm, a=0.5, b=0.4, x=0.2):
+    """
+    Routes a single streamflow timeseries given in cfs from an upstream gage to a downstream gage 
+    using the Muskingum method with a discharge-dependent velocity estimate. Resamples input 
+    from daily to hourly, routes at the hourly step, and aggregates back to daily.
+    
+    Parameters:
+    -----------
+    s_cfs : pd.Series
+        Daily streamflow timeseries in cfs where the index is datetime (may contain NaNs).
+    upstream_gage : str or int
+        Gage ID of the upstream point (used to look up distance in dm).
+    downstream_gage : str or int
+        Gage ID of the target downstream point.
+    dm : pd.DataFrame
+        In-stream distance matrix (km) where the index represents source/upstream 
+        gages and column headers represent target/downstream gages.
+    a, b : float
+        Empirical coefficients for velocity estimation: v = a * (Q_cms ** b) [m/s].
+    x : float
+        Muskingum weighting factor (typically between 0.0 and 0.3).
+        
+    Returns:
+    --------
+    pd.Series
+        The routed streamflow timeseries at the downstream gage in cfs (daily), 
+        retaining original NaN gap locations.
+    """
+    # Conversion factors
+    CFS_TO_CMS = 0.028316847
+    CMS_TO_CFS = 1.0 / CFS_TO_CMS
+    
+    if upstream_gage == downstream_gage:
+        return s_cfs.copy()
+        
+    try:
+        distance_km = dm.loc[upstream_gage, downstream_gage]
+    except KeyError:
+        raise KeyError(f"Upstream gage '{upstream_gage}' and downstream gage '{downstream_gage}' not found in distance matrix.")
+        
+    if pd.isna(distance_km) or distance_km <= 0:
+        raise ValueError(f"Invalid distance ({distance_km} km) between {upstream_gage} and {downstream_gage}.")
+    
+    print(f'distance: {distance_km} km')
+    distance_m = distance_km * 1000.0
+    dt_sec = 3600.0  # Hourly time step (1 hour in seconds)
+    
+    # -------------------------------------------------------------
+    # 1. INTERPOLATE DAILY TO HOURLY
+    # -------------------------------------------------------------
+    # Smoothly disaggregate daily values to hourly using linear interpolation
+    hourly_s = s_cfs.resample('h').ffill(limit=24)
+    #hourly_s = hourly_s.bfill().ffill() # Handle edge NaNs if any
+
+    # Initialize output hourly series matching input hourly index structure
+    routed_hourly = pd.Series(index=hourly_s.index, dtype=float)
+    
+    # Group the hourly series into contiguous blocks of valid data vs NaN gaps
+    block_groups = hourly_s.groupby((hourly_s.isna() != hourly_s.isna().shift()).cumsum())
+    
+    for _, sub_series in block_groups:
+        if sub_series.isna().any():
+            continue
+            
+        s_cms = sub_series * CFS_TO_CMS
+        inflow = s_cms.values
+        n = len(inflow)
+        outflow = np.zeros(n)
+        
+        if n > 0:
+            outflow[0] = max(inflow[0], 0.0)
+        
+        # -------------------------------------------------------------
+        # 2. RUN HOURLY MUSKINGUM ROUTING LOOP
+        # -------------------------------------------------------------
+        q_mean = s_cfs.mean() # try with mean velocity
+        v = a * (q_mean ** b)
+        K = distance_m / v
+        vs = 0
+        for i in range(1, n):
+            # q_current = max(inflow[i], 0.001)  # cms
+            # v = a * (q_mean ** b)           # velocity in m/s
+            #v = max(v, 0.01)                   # prevent zero/negative velocity
+            # vs += v
+            # K = distance_m / v                 # travel time in seconds
+            
+            denom = 2 * K * (1 - x) + dt_sec
+            if denom <= 0:
+                C0, C1, C2 = 0.0, 1.0, 0.0
+            else:
+                C0 = (-2 * K * x + dt_sec) / denom
+                C1 = (2 * K * x + dt_sec) / denom
+                C2 = (2 * K * (1 - x) - dt_sec) / denom
+            
+            outflow[i] = C0 * inflow[i] + C1 * inflow[i-1] + C2 * outflow[i-1]
+            outflow[i] = max(0.0, outflow[i])
+            
+        routed_sub_hourly = pd.Series(outflow * CMS_TO_CFS, index=sub_series.index)
+        routed_hourly.loc[sub_series.index] = routed_sub_hourly
+    
+    # -------------------------------------------------------------
+    # 3. AGGREGATE ROUTED HOURLY BACK TO DAILY
+    # -------------------------------------------------------------
+    routed_daily = routed_hourly.resample('D').mean()
+    
+    # Align index back exactly to the original s_cfs index (retaining original NaNs)
+    routed_daily = routed_daily.reindex(s_cfs.index)
+    
+    return routed_daily
+
 proj_crs = 5070
 reservoir_gdf = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs.parquet").to_crs(epsg=proj_crs)
 reservoir_gdf = reservoir_gdf[reservoir_gdf.areasqkm > 3]
@@ -1175,6 +1286,8 @@ basins_path = os.path.join(appcwd, r'spatial_data/all_UCOL_basins.parquet')
 gages_path = os.path.join(appcwd, r'spatial_data/all_UCOL_gages.parquet')
 basins = gpd.read_parquet(basins_path)
 basins.geometry = basins.geometry.to_crs(proj_crs) # need this for spatial joins
+basins['area_m2'] = basins.area
+basins['area_km2'] = basins['area_m2'] / 1E6
 gages = gpd.read_parquet(gages_path)
 big_flow_path = os.path.join(ncwd,r'data\timeseries\big_flow.csv')
 flow = pd.read_csv(big_flow_path).set_index('date')
@@ -1220,6 +1333,11 @@ evap_joined = gpd.sjoin(evap, basins, how="inner", predicate="within")
 # IRRIGATION EFFICIENCYS
 irr_df = os.path.join(ncwd, r'spatial_data\basin_irrigation_percentages.parquet')
 irr_df = gpd.read_parquet(irr_df)
+
+# DISTANCE MATRIX
+dm = pd.read_csv(r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\data\terrain\dem_ucol_big50\dist_matrix.csv')
+dm['gage'] = dm['gage'].apply(fix_gage_id)
+dm.set_index('gage', inplace=True)
 
 # WATERSHEDS
 # gageID column = gage
@@ -1314,14 +1432,16 @@ basins_subset = ['09211200', '09209400', '09205000', '09188500', '09210500', '09
 basins_sub = basins[basins.index.isin(basins_subset)].sort_values('area_m2')
 basins = basins.sort_values(by='area_km2')
 for gage in basins.index:
-    # gage = '09211200'
+    #gage = '09010500'
     rd = {'gage':gage, 'name':name_dict[gage]}
 
     # read the flow data, create output file paths 
     out_path_small = os.path.join(appDir, f"{gage}.csv")
     out_path = os.path.join(wdvrsDir, f"{gage}.csv")
     df = flow[[gage, f'{gage}_filled']]
-    df = df.rename(columns={gage:'Q_cms', f'{gage}_filled':'Q_cfs_filled'})
+    df = df.rename(columns={gage:'Q_cms', f'{gage}_filled':'Q_filled_cfs'})
+    # make another column that you won't fill
+    df['Q_unfilled_cfs'] = np.where(df['Q_filled_cfs'], np.nan, df['Q_cms']) * 35.3147
     df = fill_discharge_data(df, col_names=['Q_cms'])
     df['Q_cfs'] = df['Q_cms'] * 35.3147
 
@@ -1450,7 +1570,7 @@ for gage in basins.index:
         dfs = []
         for res in target_evaps:
             evap = pd.read_parquet(fr"N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\timeseries\evap\{res}.parquet")
-            evap['date'] = pd.to_datetime(evap['start_date'])
+            evap['date'] = pd.to_datetime(evap['date'])
             evap = evap.set_index('date')
             evap_col = f'evap_{res}'
             evap = evap.rename(columns={'E_volume (m3)': evap_col})[[evap_col]]
@@ -1458,7 +1578,7 @@ for gage in basins.index:
     
         evap_df = pd.concat(dfs, axis=1)
         # convert to negative cfs
-        CONVERSION_FACTOR = -35.3146667 / 86400,
+        CONVERSION_FACTOR = -35.3146667 / 86400
         # Convert the whole DataFrame to cfs
         for col in evap_df.columns:
             evap_df[col] = evap_df[col] * CONVERSION_FACTOR
@@ -1542,6 +1662,8 @@ for gage in basins.index:
             # for each year, find the inflow gages with good data and use them to naturalize flow
             # as more gages get operational, our estimates get better
             years = df['Q_cfs'].dropna().index.year.unique() # pick years with data
+            # add all inflows to a df
+            all_inflows = []
             for year in years:
                 startwy = pd.Timestamp(year=year-1, month=10, day=1)
                 endwy = pd.Timestamp(year=year, month=9, day=30)
@@ -1561,7 +1683,6 @@ for gage in basins.index:
                     rd[f'{year}_inflows'] = False
                     continue
                     
-
                 ydf = ydf[use]
                 yb = contained_basins[contained_basins.index.isin(use)].copy()
             
@@ -1612,9 +1733,7 @@ for gage in basins.index:
                     ydf = ydf[inflow_gages].copy()
                     rd['inflows'] = inflow_gages
 
-                    # sum all the natural inflows
-                    ydf['inflow_sum'] = ydf[inflow_gages].sum(axis=1, skipna=False)
-                    inflows = ydf[['inflow_sum']].dropna()
+                    all_inflows.append(ydf)
 
                     # compare total natural inflow vs total natural outflow to decide how much is not accounted for by ungaged inlets
                     inflow_and_outflow = inflow_gages + [gage]
@@ -1622,25 +1741,103 @@ for gage in basins.index:
                     total_inflow = overlap[inflow_gages].sum(axis=1).sum() # sum all the inflows across all years with data
                     total_outflow = overlap[gage].sum() # sum the outflow across across all years with data
                     frac_in = total_inflow / total_outflow
-
                     rd[f'{year}_frac_inflow'] = frac_in
                     rd[f'{year}_frac_gaged_inflow_area'] = frac_covered
 
-                    print(year, frac_in)
-                    if frac_in < 1 and frac_in > 0.5:
-                        # assume the unaccounted area had similar temporal behavior, add it back in  
-                        df['Q_NAT2_cfs'].loc[startwy:endwy] = inflows['inflow_sum'] / frac_in
-                    elif frac_in > 1: # the reservoir is losing a lot of water to unaccounted diversions or seepage or unaccounted evap. Ignore that.
-                        df['Q_NAT2_cfs'].loc[startwy:endwy] = inflows['inflow_sum']
-                    else: # frac in less than 0.5
-                        df['Q_NAT2_cfs'].loc[startwy:endwy] = np.nan
-                    
-                    #print(f'inflow gages: {year}, {inflow_gages}, frac_in {frac_in}, % basin gaged {frac_covered}')
-                    frac_in_cols = ['frac_inflow','frac_gaged_inflow_area']
+                    # RUN A TEST ON HOW WELL THIS PERFORMS
+                    if len(inflow_gages) > 1 and frac_covered > 0.6:
+                        for igage in inflow_gages:
+                            # leave one out
+                            inflow_copy = inflow_gages.copy()
+                            inflow_copy.remove(igage)
+                            # compare total natural inflow vs total natural outflow to decide how much is not accounted for by ungaged inlets
+                            inflow_and_outflow = inflow_copy + [gage]
+                            overlap = flow_subset[inflow_and_outflow].dropna()
+                            total_inflow = overlap[inflow_copy].sum(axis=1).sum() # sum all the inflows across all years with data
+                            total_outflow = overlap[gage].sum() # sum the outflow across across all years with data
+                            frac_in_test = total_inflow / total_outflow
+                            rd[f'{year}_{igage}_frac_inflow'] = frac_in_test/frac_in
+
+            if len(all_inflows) > 0:
+                # make a big df
+                ai_df = pd.concat(all_inflows)
+                # route each inflow
+                for igage in ai_df.columns:
+                    ai_df[f'{igage}_routed'] = route_streamflow_muskingum_cfs(ai_df[igage], igage, gage, dm)
+                    # create a column for validation
+                    df[f'test_{igage}'] = np.nan
+                    df[f'igage_{igage}'] = np.nan
+
+                df['Q_NAT3_cfs'] = np.nan
+                for year in years:
+                    if rd[f'{year}_inflows']:
+                        startwy = pd.Timestamp(year=year-1, month=10, day=1)
+                        endwy = pd.Timestamp(year=year, month=9, day=30)
+                        ydf = ai_df.loc[startwy:endwy].copy()
+                        # grab the year and the frac in
+                        frac_in = rd[f'{year}_frac_inflow']
+                        inflow_gages = rd[f'{year}_inflows']
+                        igages_routed = [f'{igage}_routed' for igage in inflow_gages]
+                        ydf['inflow_sum_routed'] = ai_df[igages_routed].sum(axis=1, skipna=False)
+                        ydf['inflow_sum'] = ai_df[inflow_gages].sum(axis=1, skipna=False)
+
+                        # VALIDATION 
+                        if len(inflow_gages) > 1 and frac_covered > 0.6:
+                            for igage in inflow_gages:
+                                if f'{year}_{igage}_frac_inflow' in rd:
+                                    # leave one out
+                                    inflow_copy = inflow_gages.copy()
+                                    inflow_copy.remove(igage)
+                                    # sum all other inflows
+                                    ydf[f'inflow_sum_{igage}'] = ai_df[inflow_copy].sum(axis=1, skipna=False)
+                                    # divide by the frac in to bump flows up, then subtract by the known inflows to yield the missing inflow
+                                    df[f'test_{igage}'].loc[startwy:endwy] = (ydf[f'inflow_sum_{igage}'] / rd[f'{year}_{igage}_frac_inflow']) - ydf[f'inflow_sum_{igage}']
+                                    df[f'igage_{igage}'].loc[startwy:endwy] = ydf[igage]
+
+                        if frac_in < 1 and frac_in > 0.5:
+                            # assume the unaccounted area had similar temporal behavior, add it back in  
+                            df['Q_NAT2_cfs'].loc[startwy:endwy] = ydf['inflow_sum'] / frac_in
+                            df['Q_NAT3_cfs'].loc[startwy:endwy] = ydf['inflow_sum_routed'] / frac_in
+                        elif frac_in > 1: # the reservoir may be releasing stored flows
+                            df['Q_NAT2_cfs'].loc[startwy:endwy] = ydf['inflow_sum'] / frac_in
+                            df['Q_NAT3_cfs'].loc[startwy:endwy] = ydf['inflow_sum_routed'] / frac_in
+                        else: # frac in less than 0.5
+                            df['Q_NAT2_cfs'].loc[startwy:endwy] = np.nan
+                            df['Q_NAT3_cfs'].loc[startwy:endwy] = np.nan
+                # igage = '09346400'
+                # fig, ax = plt.subplots()
+                # start = pd.Timestamp(day=1, month=5, year=2020)
+                # end = pd.Timestamp(day=1, month=7, year=2023)
+                # df2 = df.loc[start:end]
+                # ax.plot(df2.index, df2[f'igage_{igage}'], label='actual')
+                # ax.plot(df2.index, df2[f'test_{igage}'], label='predicted')
+                # ax.legend()
+                # ax.set_xlabel('date')
+                # ax.set_ylabel('Q')
+                # plt.show()
+                #print(f'inflow gages: {year}, {inflow_gages}, frac_in {frac_in}, % basin gaged {frac_covered}')
+                frac_in_cols = ['frac_inflow','frac_gaged_inflow_area']
+                
+                # Validate how well reservoir ungaged inflows does
+                if len(inflow_gages) > 1 and frac_covered > 0.6:
+                    for igage in inflow_gages:
+                        obs = df[f'igage_{igage}'].dropna()
+                        sim = df[f'test_{igage}'].dropna()
+                        nse = 1 - (np.sum((obs - sim) ** 2) / np.sum((obs - np.mean(obs)) ** 2))
+                        rd[f'{igage}_nse'] = nse
+                        r = df[f'igage_{igage}'].corr(df[f'test_{igage}'])
+                        rd[f'{igage}_r'] = r
+                        print(f"{gage}, {igage}, {nse:.2f}, {r:.2f}")
+            else:
+                print('contained basins empty, cant naturalize')
+                rd['contained_basins'] = False
+                df['Q_NAT2_cfs'] = np.nan
+
         else:
             print('contained basins empty, cant naturalize')
             rd['contained_basins'] = False
             df['Q_NAT2_cfs'] = np.nan
+            
     
     monthly_df = df[['Q_NAT2_cfs', 'Q_NATUSBR_cfs']].dropna().resample('MS').mean()
     # 2. Define and calculate Nash-Sutcliffe Efficiency (NSE)
@@ -1650,9 +1847,8 @@ for gage in basins.index:
     rd['nse'] = 1 - (np.sum((obs - sim) ** 2) / np.sum((obs - np.mean(obs)) ** 2))
     sum_nat = monthly_df['Q_NAT2_cfs'].sum()
     sum_usbr = monthly_df['Q_NATUSBR_cfs'].sum()
-    # Percent Bias (PBIAS) - standard in hydrology (negative = underestimation, positive = overestimation)
-    rd['pbias'] = 100 * (np.sum(sim - obs) / np.sum(obs))
 
+    rd['pbias'] = 100 * (np.sum(sim - obs) / np.sum(obs))
     rd['obs/nat'] = mass_balance_compare(df['Q_cfs'], df['Q_NAT_cfs'])
     rd['obs/nat2'] = mass_balance_compare(df['Q_cfs'], df['Q_NAT2_cfs'])
     rd['nat2/natusbr'] = mass_balance_compare(df['Q_cfs'], df['Q_NATUSBR_cfs'])
@@ -1673,6 +1869,9 @@ for gage in basins.index:
 
     print(f"Processed gage {gage}: Added {len(target_diversions)} diversion columns.")
     results.append(rd)
+
+
+
 
 
 rdf = pd.DataFrame().from_dict(results)
@@ -1824,6 +2023,7 @@ for gage in basins.index:
         gr_df = gr_df.asfreq('D')
         gr_df.to_csv(outpath2, index_label='date')
         print(f'Successfully generated {outpath2}')
+        stop
 
 
 ############# REMOVE BASINS WITH TOO MUCH DAM STORAGE OR DIVERSION ##############

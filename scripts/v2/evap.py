@@ -54,7 +54,7 @@ def get_reservoir_metadata(reservoir_names, chunk_size=50):
             
     return all_metadata
 
-def get_reservoir_timeseries(reservoir_name, start_date="1979-10-01", end_date="2025-09-30"):
+def get_reservoir_timeseries(reservoir_name, start_date="1979-10-01", end_date="2026-09-30"):
     """Get daily timeseries data for a reservoir."""
     url = f"{BASE_URL}/timeseries/daily/reservoirs/daterange"
     params = {
@@ -116,7 +116,7 @@ for idx, row in ucol_reservoirs.iterrows():
 
         
         # Clean up column names and save
-        df_ts = df_ts.drop(columns=['end_date'])
+        #df_ts = df_ts.drop(columns=['end_date'])
         safe_filename = res_name.replace(' ', '_')
         out_file = os.path.join(evap_dir, f"{safe_filename}.parquet")
         
