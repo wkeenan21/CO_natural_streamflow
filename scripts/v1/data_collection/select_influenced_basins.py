@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 cwd = os.getcwd()
 
-sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
+sys.path.append(os.path.join(cwd, 'scripts/v1/data_collection'))
 from special_functions import *
 
 flow25 = gpd.read_file(os.path.join(cwd, 'data/CSU_Flow25/watersheds_shapefile_20250624.shp'))
@@ -84,7 +84,7 @@ plt.show()
 testBasinsgdf = df[df['gage'].isin(testBasins['gage'])]
 testBasinsgdf.to_file(os.path.join(cwd, 'data/shapefiles/testBasins1.shp'))
 
-write_lines_to_file(list(testBasins['gage']), os.path.join(cwd, r'scripts/configs/testbasins1.txt'))
+write_lines_to_file(list(testBasins['gage']), os.path.join(cwd, r'scripts/v1/configs/testbasins1.txt'))
 write_lines_to_file(list(camels))
 
 

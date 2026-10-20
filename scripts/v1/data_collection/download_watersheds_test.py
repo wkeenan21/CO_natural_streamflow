@@ -4,7 +4,7 @@ import sys
 import os
 from shapely.geometry import Polygon, MultiPolygon
 cwd = os.getcwd()
-sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
+sys.path.append(os.path.join(cwd, 'scripts/v1/data_collection'))
 from special_functions import *
 
 gages = gpd.read_file(r'C:\Users\C830645719\OneDrive - Colostate\documents\GitHub\CO_natural_streamflow\data\shapefiles\gages_CO_active.shp')

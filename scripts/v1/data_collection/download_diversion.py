@@ -9,7 +9,7 @@ import sys
 from shapely.geometry import Polygon, MultiPolygon
 # define working directory
 cwd = os.getcwd()
-sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
+sys.path.append(os.path.join(cwd, 'scripts/v1/data_collection'))
 from special_functions import *
 
 token = '7V+/s+lkHFgIgpIumq0UrRIIOtpwoVyE'

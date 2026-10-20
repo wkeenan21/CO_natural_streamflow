@@ -6,9 +6,9 @@ import time
 import numpy as np
 
 cwd = os.getcwd()
-sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
+sys.path.append(os.path.join(cwd, 'scripts/v1/data_collection'))
 
-with open(os.path.join(cwd, r'scripts/configs/flow25_gages.txt'), "r") as f:
+with open(os.path.join(cwd, r'scripts/v1/configs/flow25_gages.txt'), "r") as f:
     flow25gages = f.read().splitlines()
 
 wsheds = gpd.read_file(os.path.join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_3.shp'))

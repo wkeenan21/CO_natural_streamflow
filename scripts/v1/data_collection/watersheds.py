@@ -12,7 +12,7 @@ import dataretrieval.nwis as nwis
 import sys
 
 cwd = os.getcwd()
-sys.path.append(os.path.join(cwd, 'scripts/data_collection'))
+sys.path.append(os.path.join(cwd, 'scripts/v1/data_collection'))
 from special_functions import *
 
 # read watersheds from flow25, gage points
@@ -191,7 +191,7 @@ df = df.drop_duplicates(subset=['gauge_id'])
 df.to_file(join(cwd, r'data\shapefiles\wsheds_co_camels_flow25_2.shp'))
 
 # write the flow25 gages to a txt file
-write_lines_to_file(list(flow25['gauge_id']), os.path.join(cwd, r'scripts/configs/flow25_gages.txt'))
-write_lines_to_file(list(camels['gauge_id']) + list(flow25['gauge_id']), os.path.join(cwd, r'scripts/configs/flow25_camels_gages.txt'))
+write_lines_to_file(list(flow25['gauge_id']), os.path.join(cwd, r'scripts/v1/configs/flow25_gages.txt'))
+write_lines_to_file(list(camels['gauge_id']) + list(flow25['gauge_id']), os.path.join(cwd, r'scripts/v1/configs/flow25_camels_gages.txt'))
 
 

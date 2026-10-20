@@ -61,15 +61,15 @@ static_attributes:
 - swc_pc_syr # soil water content
 target_variables:
 - Q_cfs
-test_basin_file: scripts\configs\flow25_gages.txt
+test_basin_file: scripts\v1\configs\flow25_gages.txt
 test_end_date: 31/12/2024
 test_start_date: 01/01/2022
-train_basin_file: scripts\configs\flow25_gages.txt
+train_basin_file: scripts\v1\configs\flow25_gages.txt
 train_end_date: 31/12/2021
 train_start_date: 01/01/2000
 use_frequencies: 1D
 validate_every: 50
 validate_n_random_basins: 11
-validation_basin_file: scripts\configs\flow25_gages.txt
+validation_basin_file: scripts\v1\configs\flow25_gages.txt
 validation_end_date: 31/12/2001
 validation_start_date: 01/01/2001
