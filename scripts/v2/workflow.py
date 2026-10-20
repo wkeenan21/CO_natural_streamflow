@@ -1871,15 +1871,30 @@ for gage in basins.index:
     results.append(rd)
 
 
-
-
-
 rdf = pd.DataFrame().from_dict(results)
 rdf.to_csv(r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow\data\nat_results.csv')
 
 #############
 # EXAMINE OUTPUT OF FLOW NATURALIZATION
 #############
+cols = rdf.columns
+nse_cols = [col for col in cols if '_nse' in col]
+results2 = []
+for gage in rdf.gage:
+    rd = {'gage':gage}
+    rdf2 = rdf[rdf.gage==gage]
+    meanNSE = rdf2[nse_cols].mean(axis=1).iloc[0]
+    mdNSE = rdf2[nse_cols].median(axis=1).iloc[0]
+    rd['meanNSE'] = meanNSE
+    rd['medianNSE'] = mdNSE
+    results2.append(rd)
+
+rdf3 = pd.DataFrame().from_dict(results2)
+rdf3.dropna(inplace=True)
+rdf3['name'] = rdf3['gage'].map(name_dict)
+
+
+
 from scipy.stats import gaussian_kde, pearsonr
 
 dfs = []
