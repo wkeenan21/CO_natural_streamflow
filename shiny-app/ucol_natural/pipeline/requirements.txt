@@ -1,0 +1,10 @@
+# data pipeline (update_inputs.py, naturalize.py)
+pandas
+numpy
+geopandas
+shapely
+pyarrow
+requests
+pygeohydro
+dataretrieval
+matplotlib   # only for --plots

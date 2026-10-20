@@ -10,14 +10,18 @@ import ipywidgets as widgets
 import numpy as np
 import asyncio
 import shinyswatch
+from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+SPATIAL_DIR = APP_DIR / "spatial_data"
 
 # 1. Load data
-ucol = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\UCOL.parquet").to_crs(epsg=4326)
-gages = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_gages.parquet").to_crs(epsg=4326)
-basins = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_basins.parquet").to_crs(epsg=4326)
-dvrs = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\ucrb_diversion_master_table.parquet").to_crs(epsg=4326)
-res = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs.parquet").to_crs(epsg=4326)
-res_centroid = gpd.read_parquet(r"shiny-app\ucol_natural\spatial_data\all_UCOL_reservoirs_centroids.parquet").to_crs(epsg=4326)
+ucol = gpd.read_parquet(SPATIAL_DIR / "UCOL.parquet").to_crs(epsg=4326)
+gages = gpd.read_parquet(SPATIAL_DIR / "all_UCOL_gages.parquet").to_crs(epsg=4326)
+basins = gpd.read_parquet(SPATIAL_DIR / "all_UCOL_basins.parquet").to_crs(epsg=4326)
+dvrs = gpd.read_parquet(SPATIAL_DIR / "ucrb_diversion_master_table.parquet").to_crs(epsg=4326)
+res = gpd.read_parquet(SPATIAL_DIR / "all_UCOL_reservoirs.parquet").to_crs(epsg=4326)
+res_centroid = gpd.read_parquet(SPATIAL_DIR / "all_UCOL_reservoirs_centroids.parquet").to_crs(epsg=4326)
 
 # filter reservoirs...
 res = res[res.areasqkm>0.5].copy()
@@ -39,7 +43,7 @@ gage_choices = {
     for _, row in gages.iterrows()
 }
 
-ts_dir = r'shiny-app\ucol_natural\timeseries'
+ts_dir = APP_DIR / 'timeseries'   # written by pipeline/naturalize.py
 
 # Global Color Mapping for Diversions / Consumptive Use
 CU_COLORS = {
@@ -376,12 +380,13 @@ with ui.layout_column_wrap(width=1/2):
             if gage_info is None:
                 return None
             gage = gage_info["gage"]
-            csv_path = os.path.join(ts_dir, f"{gage}.csv")
-            if not os.path.exists(csv_path):
+            ts_path = ts_dir / f"{gage}.parquet"
+            if ts_path.exists():
+                df = pd.read_parquet(ts_path)
+            elif (ts_dir / f"{gage}.csv").exists():   # older CSV output; remove once parquets exist
+                df = pd.read_csv(ts_dir / f"{gage}.csv")
+            else:
                 return None
-
-            df = pd.read_csv(csv_path)
-            print(df.columns)
             df['date'] = pd.to_datetime(df['date'])
             df.index = df['date']
 
