@@ -432,7 +432,8 @@ with ui.layout_column_wrap(width=1/2):
 
             df, valid_range = get_filtered_data()
             df = df.copy()
-            
+            q_obs = f'Q_unfilled_{unit}'
+
             if df.empty:
                 fig = go.Figure()
                 fig.add_annotation(
@@ -464,6 +465,13 @@ with ui.layout_column_wrap(width=1/2):
                 'evap':'reservoir evaporation'
             }
 
+            if q_obs in df.columns:
+                fig.add_trace(go.Scatter(
+                    x=df['date'], y=df[q_obs], name='observed flow', mode='lines',
+                    line=dict(color='royalblue', width=1.5),
+                    hovertemplate='<b>observed flow</b><br>%{y:.1f} ' + unit + '<extra></extra>'
+                ))
+
             for cu_type in cu_types:
                 col_name = f'{cu_type}_{unit}'
                 if col_name in df.columns and df[col_name].sum() != 0:
@@ -493,6 +501,8 @@ with ui.layout_column_wrap(width=1/2):
                     subtitle=dict(text='NOTE: Not enough data for naturalization at this gage', font=dict(size=12))
                 else:
                     subtitle=dict()
+            else:
+                subtitle=dict()
 
             q_nat_usbr = f'Q_NATUSBR_{unit}'
             if q_nat_usbr in df.columns:
@@ -503,25 +513,6 @@ with ui.layout_column_wrap(width=1/2):
                         line=dict(color='black', width=2, dash='dash'),
                         hovertemplate='<b>USBR Natural Flow</b><br> %{y:.1f} ' + unit + '<extra></extra>'
                     ))
-
-            q_obs = f'Q_unfilled_{unit}'
-            #print(df.columns)
-            if q_obs in df.columns:
-                fig.add_trace(go.Scatter(
-                    x=df['date'], y=df[q_obs], name='observed flow', mode='lines',
-                    line=dict(color='royalblue', width=1.5),
-                    hovertemplate='<b>observed flow</b><br>%{y:.1f} ' + unit + '<extra></extra>'
-                ))
-            
-            # check for negative natural flows
-            # if q_nat in df.columns:
-            #     negQ = np.any(df[q_nat] < 0)
-            #     if negQ:
-            #         subtitle=dict(text='NOTE: Water imports and subsequent dam storage may produce negative observed flow + consumptive use', font=dict(size=12))
-            #     else:
-            #         subtitle=dict()
-            # else:
-            #     subtitle=dict()
 
             fig.update_layout(
                 title=dict(text=f'{name} (USGS-{gage})', font=dict(size=16), subtitle=subtitle), #, Period of record {valid_range[0]} to {valid_range[1]}

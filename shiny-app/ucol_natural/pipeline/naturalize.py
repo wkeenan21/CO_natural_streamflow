@@ -514,12 +514,12 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
                         ydf[f'inflow_sum_{igage}'] / rd[f'{year}_{igage}_frac_inflow']) - ydf[f'inflow_sum_{igage}']
                     df.loc[startwy:endwy, f'igage_{igage}'] = ydf[igage]
 
-        if 0.5 < frac_in < 1 or frac_in > 1:
+        if 0.5 < frac_in < 1 or frac_in >= 1:
             # < 1: assume the unaccounted area behaves like the gaged inflows
             # > 1: the reservoir may be releasing stored flows
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = ydf['inflow_sum'] / frac_in
             df.loc[startwy:endwy, 'Q_NAT3_cfs'] = ydf['inflow_sum_routed'] / frac_in
-        else:  # frac in <= 0.5 (or exactly 1, as in workflow.py)
+        else:  # frac in <= 0.5
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = np.nan
             df.loc[startwy:endwy, 'Q_NAT3_cfs'] = np.nan
 
