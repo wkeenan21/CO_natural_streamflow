@@ -61,6 +61,12 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
   `inflow_validation_by_year.csv`. Whole-record PBIAS is ~0 by construction (in-sample ratio).
 - `plot_inflow_validation.py`: plots those CSVs to `pipeline/data/plots/` (`--hydrographs`
   adds a daily observed-vs-predicted PDF).
+- `irrigation_distance.py` (one-off, Google Earth Engine, run by Will): effective distance
+  sqrt(mean d^2) from IrrMapper v1.2 irrigated pixels (1986-2024) to WWF HydroSHEDS
+  FreeFlowingRivers (the FeatureCollection; the FeatureView is display-only), per basin (whole
+  drainage) and year. Unmapped years get the basin median. `submit` / `status` / `collect
+  --project <gee-project>` -> `spatial_data/basin_irrigation_distance.csv` (+ `_by_year`) and
+  plots. Not yet used by naturalize.py (Will reviews results first; T and S come later).
   Tested on gages 09149500 and 09251000 (inputs rebuilt from old output):
   Q_NAT / Q_NAT2 / Q_NATUSBR match to rounding error.
 - **Required inputs not in the repo yet:** `pipeline/inputs/diversions/` needs
@@ -76,6 +82,7 @@ the app to parquet and relative paths. 2026-10-22: fixed the below-reservoir lea
 validation, added the 5% share rule, validation CSVs and `plot_inflow_validation.py`
 (stub-tested only; Q_NAT2/Q_NAT3 unchanged). Open question: make the validation out-of-sample
 (fit the ratio without the scored year).
+Also added `irrigation_distance.py` (not yet run; Earth Engine part untested).
 
 **Next steps**
 1. Will: copy the diversion inputs, set the API keys, and run `update_inputs.py` then
