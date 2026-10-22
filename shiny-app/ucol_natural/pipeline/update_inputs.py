@@ -35,9 +35,9 @@ import common as C
 import diversions
 
 # Default re-download windows (days before the last cached date)
-STREAMFLOW_LOOKBACK = 120     # USGS provisional data is revised for months
-DIVERSION_LOOKBACK = 730      # diversion records are often reported a year or more late
-EVAP_LOOKBACK = 365
+STREAMFLOW_LOOKBACK = 30     # USGS provisional data is revised for months
+DIVERSION_LOOKBACK = 30      # diversion records are often reported a year or more late
+EVAP_LOOKBACK = 30
 
 
 # --------------------------------------------------------------------------
