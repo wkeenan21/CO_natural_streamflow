@@ -38,6 +38,9 @@ DIVERSIONS_PATH = DIVERSION_PROC_DIR / "diversions_filtered_filled_cfs.parquet"
 EVAP_DIR = DATA_DIR / "evap"
 NATURALIZED_FULL_DIR = DATA_DIR / "naturalized_full"     # every diversion column, for checking
 NAT_RESULTS_PATH = DATA_DIR / "nat_results.csv"
+INFLOW_VALIDATION_PATH = DATA_DIR / "inflow_validation.csv"            # see naturalize.py
+INFLOW_VALIDATION_YEARLY_PATH = DATA_DIR / "inflow_validation_by_year.csv"
+VALIDATION_PLOT_DIR = DATA_DIR / "plots"                                  # plot_inflow_validation.py
 
 # Static inputs in spatial_data/
 BASINS_PATH = SPATIAL_DIR / "all_UCOL_basins.parquet"

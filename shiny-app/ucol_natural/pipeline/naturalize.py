@@ -19,6 +19,9 @@ Outputs
   shiny-app/ucol_natural/timeseries/<gage>.parquet        app file ('Q' columns + CU by type)
   pipeline/data/naturalized_full/<gage>.parquet           every diversion column
   pipeline/data/nat_results.csv                           per-gage diagnostics (NSE, PBIAS, ...)
+  pipeline/data/inflow_validation.csv                     leave-one-out test of the below-reservoir
+                                                          scaling: NSE/PBIAS per (basin, inflow gage)
+  pipeline/data/inflow_validation_by_year.csv             the same per water year
   spatial_data/ucrb_diversion_master_table.parquet        diversion points for the app map
 """
 import argparse
@@ -53,6 +56,10 @@ GLOVER_MAX_LAG_DAYS = 365 * 5
 
 # basins dropped from the analysis ("chipmunk outlet thing" etc.)
 EXCLUDED_BASINS = ['09014050', '09060799', '09019000']
+
+# leave-one-out validation below reservoirs: only evaluate an inflow gage in years when it
+# carries at least this share of the basin's estimated natural flow (Q_NAT2)
+MIN_VALIDATION_SHARE = 0.05
 
 
 # --------------------------------------------------------------------------
@@ -469,27 +476,32 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
 
         # total natural inflow vs outflow -> share not accounted for by ungaged inlets
         overlap = flow_subset[inflow_gages + [gage]].dropna()
-        frac_in = overlap[inflow_gages].sum(axis=1).sum() / overlap[gage].sum()
+        gaged_total = overlap[inflow_gages].sum(axis=1).sum()
+        frac_in = gaged_total / overlap[gage].sum()
         rd[f'{year}_frac_inflow'] = frac_in
         rd[f'{year}_frac_gaged_inflow_area'] = frac_covered
 
-        # leave-one-out test of the ungaged-inflow scaling
+        # leave-one-out test of the ungaged-inflow scaling. The stored value is
+        # frac_in_test / frac_in = share of gaged inflow from the other gages. It is computed
+        # on the same dates as frac_in; giving the reduced set its own (often longer) overlap
+        # let the outlet sums stop cancelling and biased the test.
         if len(inflow_gages) > 1 and frac_covered > 0.6:
             for igage in inflow_gages:
                 inflow_copy = [g for g in inflow_gages if g != igage]
-                overlap = flow_subset[inflow_copy + [gage]].dropna()
-                frac_in_test = overlap[inflow_copy].sum(axis=1).sum() / overlap[gage].sum()
-                rd[f'{year}_{igage}_frac_inflow'] = frac_in_test / frac_in
+                rd[f'{year}_{igage}_frac_inflow'] = overlap[inflow_copy].sum(axis=1).sum() / gaged_total
 
     if len(all_inflows) == 0:
         return
 
     ai_df = pd.concat(all_inflows)
-    for igage in list(ai_df.columns):
+    raw_inflows = list(ai_df.columns)
+    for igage in raw_inflows:
         ai_df[f'{igage}_routed'] = route_streamflow_muskingum_cfs(ai_df[igage], igage, gage, dm)
         df[f'test_{igage}'] = np.nan
         df[f'igage_{igage}'] = np.nan
 
+    name_dict = inp['name_dict']
+    yearly_rows = []
     df['Q_NAT3_cfs'] = np.nan
     for year in years:
         if not rd.get(f'{year}_inflows'):
@@ -497,24 +509,15 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
         startwy = pd.Timestamp(year=year - 1, month=10, day=1)
         endwy = pd.Timestamp(year=year, month=9, day=30)
         ydf = ai_df.loc[startwy:endwy].copy()
+        if ydf.empty:  # e.g. the water year before the record starts
+            continue
         frac_in = rd[f'{year}_frac_inflow']
         y_inflows = rd[f'{year}_inflows']
-        inflow_gages = y_inflows   # workflow.py reuses this name, so the final check sees the last year
-        ydf['inflow_sum_routed'] = ai_df[[f'{g}_routed' for g in y_inflows]].sum(axis=1, skipna=False)
-        ydf['inflow_sum'] = ai_df[y_inflows].sum(axis=1, skipna=False)
+        # sum within the year (summing ai_df and assigning would give an empty ydf the full index)
+        ydf['inflow_sum_routed'] = ydf[[f'{g}_routed' for g in y_inflows]].sum(axis=1, skipna=False)
+        ydf['inflow_sum'] = ydf[y_inflows].sum(axis=1, skipna=False)
 
-        # validation (as in workflow.py, uses the last year's frac_covered)
-        if len(y_inflows) > 1 and frac_covered > 0.6:
-            for igage in y_inflows:
-                if f'{year}_{igage}_frac_inflow' in rd:
-                    inflow_copy = [g for g in y_inflows if g != igage]
-                    ydf[f'inflow_sum_{igage}'] = ai_df[inflow_copy].sum(axis=1, skipna=False)
-                    # bump flows up by frac in, subtract known inflows -> missing inflow
-                    df.loc[startwy:endwy, f'test_{igage}'] = (
-                        ydf[f'inflow_sum_{igage}'] / rd[f'{year}_{igage}_frac_inflow']) - ydf[f'inflow_sum_{igage}']
-                    df.loc[startwy:endwy, f'igage_{igage}'] = ydf[igage]
-
-        if 0.5 < frac_in < 1 or frac_in >= 1:
+        if frac_in > 0.5:
             # < 1: assume the unaccounted area behaves like the gaged inflows
             # > 1: the reservoir may be releasing stored flows
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = ydf['inflow_sum'] / frac_in
@@ -522,17 +525,64 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
         else:  # frac in <= 0.5
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = np.nan
             df.loc[startwy:endwy, 'Q_NAT3_cfs'] = np.nan
+            continue  # scaling not applied this year, so nothing to validate
 
-    # how well does the ungaged-inflow scaling do? (last year's inflow gages, as in workflow.py)
-    if len(inflow_gages) > 1 and frac_covered > 0.6:
-        for igage in inflow_gages:
-            if f'igage_{igage}' not in df.columns:
+        # validation: hold out each inflow gage and predict it from the others. The keys
+        # below only exist for years with >1 inflow gage and frac_covered > 0.6 (this
+        # year's values, checked in the loop above).
+        has_flow = ydf['inflow_sum'].notna()
+        nat_total = ydf.loc[has_flow, 'inflow_sum'].sum() / frac_in  # this year's natural outflow
+        for igage in y_inflows:
+            key = f'{year}_{igage}_frac_inflow'
+            if key not in rd:
                 continue
-            obs = df[f'igage_{igage}'].dropna()
-            sim = df[f'test_{igage}'].dropna()
-            rd[f'{igage}_nse'] = 1 - (np.sum((obs - sim) ** 2) / np.sum((obs - np.mean(obs)) ** 2))
-            rd[f'{igage}_r'] = df[f'igage_{igage}'].corr(df[f'test_{igage}'])
-            print(f"  {gage}, {igage}, nse {rd[f'{igage}_nse']:.2f}, r {rd[f'{igage}_r']:.2f}")
+            # skip gages that are a small piece of the basin (e.g. Escalante at Lees Ferry)
+            share = ydf.loc[has_flow, igage].sum() / nat_total if nat_total > 0 else np.nan
+            rd[f'{year}_{igage}_share'] = share
+            if not share >= MIN_VALIDATION_SHARE:
+                continue
+            inflow_copy = [g for g in y_inflows if g != igage]
+            others = ai_df.loc[startwy:endwy, inflow_copy].sum(axis=1, skipna=False)
+            # bump flows up by frac in, subtract known inflows -> missing inflow
+            test = others / rd[key] - others
+            df.loc[startwy:endwy, f'test_{igage}'] = test
+            df.loc[startwy:endwy, f'igage_{igage}'] = ydf[igage]
+            yearly_rows.append({'gage': gage, 'name': rd['name'], 'inflow_gage': igage,
+                                'inflow_name': name_dict.get(igage), 'water_year': year,
+                                'share': share, 'frac_covered': rd[f'{year}_frac_gaged_inflow_area'],
+                                **fit_stats(ydf[igage], test)})
+
+    # how well does the ungaged-inflow scaling do? every held-out gage, all evaluated years
+    summary_rows = []
+    for igage in raw_inflows:
+        stats = fit_stats(df[f'igage_{igage}'], df[f'test_{igage}'])
+        if stats['n_days'] == 0:
+            continue
+        yrs = [r for r in yearly_rows if r['inflow_gage'] == igage]
+        rd[f'{igage}_nse'], rd[f'{igage}_pbias'], rd[f'{igage}_r'] = stats['nse'], stats['pbias'], stats['r']
+        summary_rows.append({'gage': gage, 'name': rd['name'], 'inflow_gage': igage,
+                             'inflow_name': name_dict.get(igage), 'n_years': len(yrs),
+                             'mean_share': np.mean([r['share'] for r in yrs]), **stats})
+        print(f"  {gage}, {igage}, nse {stats['nse']:.2f}, pbias {stats['pbias']:.1f}, r {stats['r']:.2f}")
+    rd['_validation'] = (summary_rows, yearly_rows)
+
+
+VAL_SUMMARY_COLS = ['gage', 'name', 'inflow_gage', 'inflow_name', 'n_years', 'mean_share',
+                    'n_days', 'nse', 'pbias', 'r']
+VAL_YEARLY_COLS = ['gage', 'name', 'inflow_gage', 'inflow_name', 'water_year', 'share',
+                   'frac_covered', 'n_days', 'nse', 'pbias', 'r']
+
+
+def fit_stats(obs, sim):
+    """NSE, PBIAS (%) and r of sim vs obs, on the days both have data."""
+    m = pd.concat([obs.rename('obs'), sim.rename('sim')], axis=1).dropna()
+    if m.empty:
+        return {'n_days': 0, 'nse': np.nan, 'pbias': np.nan, 'r': np.nan}
+    o, s = m['obs'], m['sim']
+    with np.errstate(divide='ignore', invalid='ignore'):
+        nse = 1 - np.sum((o - s) ** 2) / np.sum((o - o.mean()) ** 2)
+        pbias = 100 * np.sum(s - o) / np.sum(o)
+    return {'n_days': len(m), 'nse': nse, 'pbias': pbias, 'r': o.corr(s)}
 
 
 # --------------------------------------------------------------------------
@@ -563,22 +613,29 @@ def main():
         wanted = set(order)
 
     nat_store, results, skipped = {}, [], []
+    val_summary, val_yearly = [], []
     for gage in order:
         if gage not in inp['flow'].columns:
             skipped.append(gage)
             continue
         df, rd = naturalize_gage(gage, inp, nat_store)
         nat_store[gage] = df['Q_NAT2_cfs']
+        summary_rows, yearly_rows = rd.pop('_validation', ([], []))
         if gage in wanted:
             df.reset_index(names='date').to_parquet(C.NATURALIZED_FULL_DIR / f"{gage}.parquet", index=False)
             small = df[app_columns(df)].reset_index(names='date')
             small.to_parquet(C.TIMESERIES_DIR / f"{gage}.parquet", index=False)
             results.append(rd)
+            val_summary += summary_rows
+            val_yearly += yearly_rows
             print(f"processed {gage} ({rd['name']}): {rd['n_diversions']} diversions")
 
     if skipped:
         print(f"no streamflow for {len(skipped)} basins, skipped: {skipped}")
     pd.DataFrame(results).to_csv(C.NAT_RESULTS_PATH, index=False)
+    pd.DataFrame(val_summary, columns=VAL_SUMMARY_COLS).to_csv(C.INFLOW_VALIDATION_PATH, index=False)
+    pd.DataFrame(val_yearly, columns=VAL_YEARLY_COLS).to_csv(C.INFLOW_VALIDATION_YEARLY_PATH, index=False)
+    print(f"inflow validation: {len(val_summary)} inflow gages in {C.INFLOW_VALIDATION_PATH}")
     print(f"wrote {len(results)} gages to {C.TIMESERIES_DIR}; diagnostics in {C.NAT_RESULTS_PATH}")
 
 

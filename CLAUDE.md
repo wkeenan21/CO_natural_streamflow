@@ -54,6 +54,13 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
   below-reservoir basins. Outputs: `timeseries/<gage>.parquet` (app columns),
   `pipeline/data/naturalized_full/`, `pipeline/data/nat_results.csv`,
   `spatial_data/ucrb_diversion_master_table.parquet`. `--gages` runs a subset.
+  Below-reservoir validation: each inflow gage is held out and predicted from the others
+  (same dates as `frac_in`, per-year inflow set and `frac_covered`, skipped in years it carries
+  < 5% of the basin's estimated natural flow, `MIN_VALIDATION_SHARE`). NSE/PBIAS/r go to
+  `pipeline/data/inflow_validation.csv` (per basin + inflow gage) and
+  `inflow_validation_by_year.csv`. Whole-record PBIAS is ~0 by construction (in-sample ratio).
+- `plot_inflow_validation.py`: plots those CSVs to `pipeline/data/plots/` (`--hydrographs`
+  adds a daily observed-vs-predicted PDF).
   Tested on gages 09149500 and 09251000 (inputs rebuilt from old output):
   Q_NAT / Q_NAT2 / Q_NATUSBR match to rounding error.
 - **Required inputs not in the repo yet:** `pipeline/inputs/diversions/` needs
@@ -63,9 +70,12 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
 - **API keys come from environment variables:** `API_USGS_PAT`, `CDSS_API_KEY`,
   `DRI_EVAP_API_KEY`. Never hard-code keys.
 
-## Status (end of 2026-10-20 session)
+## Status (end of 2026-10-22 session)
 Done on `cc`: moved v1 folders into `scripts/v1/`; added this file; built the pipeline; switched
-the app to parquet and relative paths.
+the app to parquet and relative paths. 2026-10-22: fixed the below-reservoir leave-one-out
+validation, added the 5% share rule, validation CSVs and `plot_inflow_validation.py`
+(stub-tested only; Q_NAT2/Q_NAT3 unchanged). Open question: make the validation out-of-sample
+(fit the ratio without the scored year).
 
 **Next steps**
 1. Will: copy the diversion inputs, set the API keys, and run `update_inputs.py` then
@@ -87,7 +97,6 @@ the app to parquet and relative paths.
 **Known issues, kept as-is because changing them changes results (ask before changing):**
 - Muskingum routing calculates velocity from mean flow in cfs, while the formula
   (`v = a*Q^b`) expects cms.
-- Reservoir validation uses the last processed year's `frac_covered` / inflow list.
 - As in the USGS script, NMOSE sites are read from raw downloads, so their historical records
   are not merged in.
 - Exposed API keys: a USGS key is in `scripts/v2/flow_routing.py` and
