@@ -224,3 +224,27 @@ irr_df['ie'] = irr_df['ie'].fillna(med_ie)
 results_output_path = os.path.join(ncwd, r'spatial_data\basin_irrigation_percentages.parquet')
 irr_df.to_parquet(results_output_path, index=True)
 print(f"Analysis complete. Results saved to: {results_output_path}")
+
+
+from pynhd import NLDI, WaterData, NHDPlusHR
+import pynhd as nhd
+nldi = NLDI()
+station_id = "09380000"
+
+basin = nldi.get_basins(station_id)
+
+flw_main = nldi.navigate_byid(
+    fsource="nwissite",
+    fid=f"USGS-{station_id}",
+    navigation="upstreamMain",
+    source="flowlines",
+    distance=1000,
+)
+
+flw_trib = nldi.navigate_byid(
+    fsource="nwissite",
+    fid=f"USGS-{station_id}",
+    navigation="upstreamTributaries",
+    source="flowlines",
+    distance=300,
+)
