@@ -38,6 +38,7 @@ DIVERSIONS_PATH = DIVERSION_PROC_DIR / "diversions_filtered_filled_cfs.parquet"
 EVAP_DIR = DATA_DIR / "evap"
 NATURALIZED_FULL_DIR = DATA_DIR / "naturalized_full"     # every diversion column, for checking
 NAT_RESULTS_PATH = DATA_DIR / "nat_results.csv"
+NHD_DIR = DATA_DIR / "nhd"                                # download_nhd.py (NHD HR flowlines)
 INFLOW_VALIDATION_PATH = DATA_DIR / "inflow_validation.csv"            # see naturalize.py
 INFLOW_VALIDATION_YEARLY_PATH = DATA_DIR / "inflow_validation_by_year.csv"
 VALIDATION_PLOT_DIR = DATA_DIR / "plots"                                  # plot_inflow_validation.py
@@ -53,6 +54,8 @@ DIVERSION_MASTER_CSV = DIVERSION_INPUT_DIR / "ucrb_diversion_master_table.csv"
 IRRIGATION_PATH = SPATIAL_DIR / "basin_irrigation_percentages.csv"
 DIST_MATRIX_PATH = SPATIAL_DIR / "dist_matrix.csv"
 USBR_NAT_FLOWS_PATH = SPATIAL_DIR / "usbr_nat_flows.csv"
+IRR_DISTANCE_PATH = SPATIAL_DIR / "basin_irrigation_distance.csv"                  # irrigation_distance.py
+IRR_DISTANCE_BY_YEAR_PATH = SPATIAL_DIR / "basin_irrigation_distance_by_year.csv"
 
 # --------------------------------------------------------------------------
 # Settings
