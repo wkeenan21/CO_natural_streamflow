@@ -8,4 +8,4 @@ requests
 pygeohydro
 dataretrieval
 matplotlib   # only for --plots
-earthengine-api  # only for irrigation_distance.py (one-off)
+earthengine-api  # only for dist2stream.py (one-off)
