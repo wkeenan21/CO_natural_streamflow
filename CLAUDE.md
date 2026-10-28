@@ -15,6 +15,7 @@ outputs are reused as static inputs. Only data that changes over time is automat
   - `app.py`: Shiny for Python (Express) app. ipyleaflet map (UCOL, gages, basins, diversions,
     reservoirs) and a Plotly hydrograph: observed (`Q_unfilled_*`), estimated natural
     (`Q_NAT2_*`), USBR natural (`Q_NATUSBR_*`), stacked consumptive use; CSV download.
+    A "Basin details" card below both panels reads `timeseries/basin_info.csv`.
     Paths are relative to `app.py` (`APP_DIR`). It reads `timeseries/<gage>.parquet`
     and falls back to the old `<gage>.csv` when no parquet exists.
   - `pipeline/`: data pipeline (see below).
@@ -51,7 +52,12 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
   matches to rounding error.
 - `naturalize.py`: port of workflow.py's "MERGE DIVERSIONS WITH STREAMFLOW" loop. Basins are
   processed smallest to largest; final `Q_NAT2_cfs` is kept in memory (`nat_store`) for
-  below-reservoir basins. Outputs: `timeseries/<gage>.parquet` (app columns),
+  below-reservoir basins. Below a reservoir, Q_NAT2 = sum of routed inflow Q_NAT2 / frac_in,
+  so each inflow carries its own basin's Glover lag. Reservoir basins with <= 10 years of
+  record (the workflow.py rule) get Q_NAT2 = NaN (`short_record_res`), and downstream basins
+  fall back to other inflows (e.g. Farmington uses Archuleta + Animas instead of Bolack Ranch).
+  Outputs: `timeseries/<gage>.parquet` (app columns), `timeseries/basin_info.csv` (app basin
+  panel: method, CU factor, Glover distance, inflow gages as `gage:wy1-wy2:n;...`),
   `pipeline/data/naturalized_full/`, `pipeline/data/nat_results.csv`,
   `spatial_data/ucrb_diversion_master_table.parquet`. `--gages` runs a subset.
   Below-reservoir validation: each inflow gage is held out and predicted from the others
@@ -78,6 +84,19 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
   naturalize.py (Will reviews results first; T and S come later).
   Tested on gages 09149500 and 09251000 (inputs rebuilt from old output):
   Q_NAT / Q_NAT2 / Q_NATUSBR match to rounding error.
+- `irr_dist2stream.py` (one-off, local, ~1 min): simpler replacement for dist2stream.py.
+  GMIA-NEXT 2024 irrigation probability (`spatial_data/GMIA-NEXT_prob_NAM1_2024_v0.tif`,
+  irrigated = prob >= 50%, 2024 taken as representative) and NHD stream_perennial +
+  artificial_path by default, `--classes` adds e.g. canal_ditch (saved as
+  `pipeline/data/nhd/streams_<tag>.gpkg`). Area-weighted **mean** distance (not RMS) of
+  irrigated pixels to the nearest flowline per basin (whole drainage)
+  -> `spatial_data/basin_dist2stream_gmia_<tag>.csv` (art-per and art-can-per both run;
+  adding ditches cuts the median basin mean distance from 522 to 310 m). Mean, not RMS, on purpose: every irrigated
+  acre gets equal weight, which gives the average return-flow response of the basin.
+  GMIA-NEXT maps far less irrigated land in Colorado basins than `basin_irrigation_percentages.csv`
+  (median ratio ~0.12). **naturalize.py uses the art-per `mean_dist_ft` as the per-basin Glover
+  distance** (`C.DIST2STREAM_PATH`; basins with no mapped irrigation get the median), replacing
+  the fixed 2,640 ft. `rd['glover_a_ft']` records it in nat_results.csv.
 - **Required inputs not in the repo yet:** `pipeline/inputs/diversions/` needs
   `ucrb_diversion_master_table.csv` and the `nmose_`, `utdwr_`, `cuwcd_` and
   `wyseo_historical_data/` folders, copied from
@@ -133,8 +152,9 @@ validation, added the 5% share rule, validation CSVs and `plot_inflow_validation
 Unit suffix `_cms` / `_cfs` / `_mmd`. Key columns: `Q_cfs` (observed, gap-filled),
 `Q_unfilled_cfs` (observed), `Q_CU_cfs` (total consumptive use), `<type>_cfs` per CU type
 (irrigation, municipal, interbasin, industrial, hydropower, intrabasin, transbasin, evap),
-`Q_NAT_cfs`, **`Q_NAT2_cfs` (main product)**, `Q_NAT3_cfs` (routed, reservoir basins),
-`Q_NATUSBR_cfs`. The app depends on these names, so a rename must update `naturalize.py`
+`Q_NAT_cfs`, **`Q_NAT2_cfs` (main product; below reservoirs built from Muskingum-routed
+inflows)**, `Q_NATUSBR_cfs`. `Q_NAT3_cfs` (routed version) was merged into `Q_NAT2_cfs` on
+2026-10-28; the old CSVs still have it. The app depends on these names, so a rename must update `naturalize.py`
 and `app.py`.
 
 ## Environment

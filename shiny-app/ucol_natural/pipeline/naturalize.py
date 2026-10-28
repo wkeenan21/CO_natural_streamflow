@@ -11,12 +11,14 @@ For each basin, smallest to largest:
   Q_NAT_cfs   = Q_cfs - evap_cfs - Q_CU_cfs   (add back consumptive use and reservoir evap)
   Q_NAT2_cfs  = Q_NAT_cfs with irrigation diversions removed and Glover-lagged return
                 flows added back (floored at 0). Below major reservoirs, Q_NAT2_cfs is
-                rebuilt from naturalized inflow gages scaled by frac_in, and Q_NAT3_cfs
-                is the same with Muskingum-routed inflows.
+                rebuilt from Muskingum-routed naturalized inflow gages scaled by frac_in;
+                reservoir basins with <= 10 years of record get NaN.
   Q_NATUSBR_cfs  USBR monthly natural flow spread to daily, for comparison.
 
 Outputs
   shiny-app/ucol_natural/timeseries/<gage>.parquet        app file ('Q' columns + CU by type)
+  shiny-app/ucol_natural/timeseries/basin_info.csv        per-basin parameters for the app panel
+                                                          (CU factor, Glover distance, inflow gages)
   pipeline/data/naturalized_full/<gage>.parquet           every diversion column
   pipeline/data/nat_results.csv                           per-gage diagnostics (NSE, PBIAS, ...)
   pipeline/data/inflow_validation.csv                     leave-one-out test of the below-reservoir
@@ -48,8 +50,8 @@ USE_DICT = {
 # Irrigation efficiency by method (from scripts/v2/irrigation_data.py)
 FLOOD_EFF, SPRINK_EFF, DRIP_EFF = 0.5, 0.8, 0.9
 
-# Glover return-flow aquifer parameters
-GLOVER_A_FT = 2640        # distance to stream (ft)
+# Glover return-flow aquifer parameters. Distance to stream (a) is per basin: the mean
+# distance from irrigated land to perennial streams (C.DIST2STREAM_PATH, irr_dist2stream.py).
 GLOVER_T = 5000.0         # transmissivity (ft^2/day)
 GLOVER_S = 0.20           # specific yield
 GLOVER_MAX_LAG_DAYS = 365 * 5
@@ -186,6 +188,17 @@ def load_irrigation_efficiency(basin_ids):
     return irr['ie'].reindex(basin_ids).fillna(med_ie)
 
 
+def load_glover_distance(basin_ids):
+    """Glover distance to stream (ft) per basin; basins with no mapped irrigation get the median.
+
+    Also returns the mapped irrigated area (km2, NaN where the median was used)."""
+    d = pd.read_csv(C.DIST2STREAM_PATH, dtype={'gage': str})
+    d['gage'] = d['gage'].apply(C.fix_gage_id)
+    d = d.set_index('gage').reindex(basin_ids)
+    a_ft = d['mean_dist_ft']
+    return a_ft.fillna(a_ft.median()), d['irrigated_km2'].where(a_ft.notna())
+
+
 def load_usbr_natural_flows():
     """USBR monthly natural flows (acre-feet/month) as mean cfs, WY1980-2020."""
     brdf = pd.read_csv(C.USBR_NAT_FLOWS_PATH, encoding='utf-8-sig')
@@ -239,6 +252,7 @@ def load_inputs():
     inp['evap_joined'] = gpd.sjoin(evap, basins, how="inner", predicate="within")
 
     inp['ie'] = load_irrigation_efficiency(basins.index)
+    inp['glover_a_ft'], inp['irrigated_km2'] = load_glover_distance(basins.index)
 
     dm = pd.read_csv(C.DIST_MATRIX_PATH, dtype={'gage': str})
     dm['gage'] = dm['gage'].apply(C.fix_gage_id)
@@ -278,6 +292,9 @@ def naturalize_gage(gage, inp, nat_store):
 
     # irrigation efficiency for this basin
     useDict['irrigation'] = inp['ie'].loc[gage] * -1
+    rd['irr_cu_factor'] = inp['ie'].loc[gage]
+    rd['glover_a_ft'] = inp['glover_a_ft'].loc[gage]
+    rd['irrigated_km2'] = inp['irrigated_km2'].loc[gage]
 
     area = basins.loc[gage, 'area_m2']
     df['Q_mmd'] = (df['Q_cms'] * 86400000) / area
@@ -340,7 +357,7 @@ def naturalize_gage(gage, inp, nat_store):
             if 'irrigation_cfs' in df.columns:
                 df['irrigation_diversion_cfs'] = df['irrigation_cfs'] / useDict['irrigation'] * -1  # CU -> diversion
                 df['irrigation_rf_cfs'] = df['irrigation_diversion_cfs'] * (1 - useDict['irrigation'] * -1)  # -> return flow
-                kernel = glover_unit_response(np.arange(GLOVER_MAX_LAG_DAYS), GLOVER_A_FT, GLOVER_T, GLOVER_S)
+                kernel = glover_unit_response(np.arange(GLOVER_MAX_LAG_DAYS), rd['glover_a_ft'], GLOVER_T, GLOVER_S)
                 if np.sum(kernel) > 0:
                     kernel = kernel / np.sum(kernel)
                 rf_series = df['irrigation_rf_cfs'].fillna(0).values
@@ -387,6 +404,12 @@ def naturalize_gage(gage, inp, nat_store):
     name = name_dict[gage].lower()
     if (len(basin_res) > 0 and days > 3650) or ('below' in name and 'reservoir' in name):
         reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store)
+    elif len(basin_res) > 0:
+        # too short to estimate frac_in (reservoir storage changes don't average out), and its
+        # Q_NAT2 would still carry reservoir regulation. Downstream basins use other inflows.
+        print(f'  {gage}: reservoir basin with < 10 years of data, Q_NAT2 set to NaN')
+        rd['short_record_res'] = True
+        df['Q_NAT2_cfs'] = np.nan
 
     # ---- comparison with USBR ----
     monthly_df = df[['Q_NAT2_cfs', 'Q_NATUSBR_cfs']].dropna().resample('MS').mean()
@@ -502,7 +525,6 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
 
     name_dict = inp['name_dict']
     yearly_rows = []
-    df['Q_NAT3_cfs'] = np.nan
     for year in years:
         if not rd.get(f'{year}_inflows'):
             continue
@@ -520,11 +542,9 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
         if frac_in > 0.5:
             # < 1: assume the unaccounted area behaves like the gaged inflows
             # > 1: the reservoir may be releasing stored flows
-            df.loc[startwy:endwy, 'Q_NAT2_cfs'] = ydf['inflow_sum'] / frac_in
-            df.loc[startwy:endwy, 'Q_NAT3_cfs'] = ydf['inflow_sum_routed'] / frac_in
+            df.loc[startwy:endwy, 'Q_NAT2_cfs'] = ydf['inflow_sum_routed'] / frac_in
         else:  # frac in <= 0.5
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = np.nan
-            df.loc[startwy:endwy, 'Q_NAT3_cfs'] = np.nan
             continue  # scaling not applied this year, so nothing to validate
 
         # validation: hold out each inflow gage and predict it from the others. The keys
@@ -592,6 +612,32 @@ def app_columns(df):
     return [col for col in df.columns if 'Q' in col or col in cu_cols]
 
 
+def basin_info_row(rd, area_km2):
+    """One row of timeseries/basin_info.csv (the app's basin panel) from a gage's diagnostics.
+
+    inflow_gages: 'gage:first_wy-last_wy:n_years' entries joined by ';' (below-reservoir only).
+    """
+    if rd.get('below_res'):
+        method = 'below_reservoir'
+    elif rd.get('short_record_res'):
+        method = 'reservoir_short_record'
+    else:
+        method = 'standard'
+    years = defaultdict(list)
+    for key, val in rd.items():
+        if key.endswith('_inflows') and key[:4].isdigit() and isinstance(val, list):
+            for g in val:
+                years[g].append(int(key[:4]))
+    inflows = ';'.join(f"{g}:{min(y)}-{max(y)}:{len(y)}"
+                       for g, y in sorted(years.items(), key=lambda kv: (-len(kv[1]), kv[0])))
+    frac_in = [v for k, v in rd.items() if k.endswith('_frac_inflow') and k.count('_') == 2]
+    return {'gage': rd['gage'], 'name': rd['name'], 'area_km2': area_km2, 'method': method,
+            'irr_cu_factor': rd.get('irr_cu_factor'), 'glover_a_ft': rd.get('glover_a_ft'),
+            'irrigated_km2': rd.get('irrigated_km2'), 'n_diversions': rd.get('n_diversions'),
+            'inflow_gages': inflows, 'median_frac_in': np.median(frac_in) if frac_in else np.nan,
+            'nse_usbr': rd.get('nse'), 'pbias_usbr': rd.get('pbias')}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--gages", nargs="+", help="only write these gages (all basins are still "
@@ -612,7 +658,7 @@ def main():
     else:
         wanted = set(order)
 
-    nat_store, results, skipped = {}, [], []
+    nat_store, results, info, skipped = {}, [], [], []
     val_summary, val_yearly = [], []
     for gage in order:
         if gage not in inp['flow'].columns:
@@ -626,6 +672,7 @@ def main():
             small = df[app_columns(df)].reset_index(names='date')
             small.to_parquet(C.TIMESERIES_DIR / f"{gage}.parquet", index=False)
             results.append(rd)
+            info.append(basin_info_row(rd, basins.loc[gage, 'area_km2']))
             val_summary += summary_rows
             val_yearly += yearly_rows
             print(f"processed {gage} ({rd['name']}): {rd['n_diversions']} diversions")
@@ -633,6 +680,11 @@ def main():
     if skipped:
         print(f"no streamflow for {len(skipped)} basins, skipped: {skipped}")
     pd.DataFrame(results).to_csv(C.NAT_RESULTS_PATH, index=False)
+    info = pd.DataFrame(info)
+    if args.gages and C.BASIN_INFO_PATH.exists():  # partial run: update these rows only
+        old = pd.read_csv(C.BASIN_INFO_PATH, dtype={'gage': str})
+        info = pd.concat([old[~old['gage'].isin(info['gage'])], info])
+    info.sort_values('gage').to_csv(C.BASIN_INFO_PATH, index=False, float_format='%.4g')
     pd.DataFrame(val_summary, columns=VAL_SUMMARY_COLS).to_csv(C.INFLOW_VALIDATION_PATH, index=False)
     pd.DataFrame(val_yearly, columns=VAL_YEARLY_COLS).to_csv(C.INFLOW_VALIDATION_YEARLY_PATH, index=False)
     print(f"inflow validation: {len(val_summary)} inflow gages in {C.INFLOW_VALIDATION_PATH}")

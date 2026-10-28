@@ -45,6 +45,12 @@ gage_choices = {
 
 ts_dir = APP_DIR / 'timeseries'   # written by pipeline/naturalize.py
 
+# per-basin parameters for the basin panel (also written by naturalize.py)
+basin_info_path = ts_dir / 'basin_info.csv'
+basin_info = (pd.read_csv(basin_info_path, dtype={'gage': str}).set_index('gage')
+              if basin_info_path.exists() else pd.DataFrame())
+gage_names = dict(zip(gages['gage'].astype(str), gages['name']))
+
 # Global Color Mapping for Diversions / Consumptive Use
 CU_COLORS = {
     'irrigation': '#7aab74', 'municipal': '#7570b3', 'interbasin': '#d95f02',
@@ -73,9 +79,10 @@ ui.page_opts(title=ui.div(
             style="font-size: 0.75rem; font-weight: 400; color: #666666; margin-top: 2px;"
         ),
         style="text-align: left; width: 100%;"
-    ), fillable=True, theme=shinyswatch.theme.solar)
+    ), fillable=False, theme=shinyswatch.theme.solar)
 
-with ui.layout_column_wrap(width=1/2):
+# map + hydrograph fill most of the first screen; the basin panel is below (scroll)
+with ui.layout_column_wrap(width=1/2, height="calc(100vh - 110px)", min_height="500px"):
     
     # LEFT PANEL: Map
     with ui.card():
@@ -527,3 +534,75 @@ with ui.layout_column_wrap(width=1/2):
             )
             # go again
             return fig
+# BOTTOM PANEL: parameters of the selected basin
+METHOD_LABELS = {
+    'standard': 'Observed flow + consumptive use, with lagged irrigation return flows',
+    'below_reservoir': 'Below a reservoir: sum of routed natural inflows, scaled to the basin',
+    'reservoir_short_record': 'Reservoir basin with under 10 years of record: not estimated',
+}
+
+
+def info_item(label, value, note=None):
+    return ui.div(
+        ui.div(label, class_="text-muted", style="font-size: 0.75rem;"),
+        ui.div(value, style="font-size: 1rem; font-weight: 600;"),
+        ui.div(note, class_="text-muted", style="font-size: 0.7rem;") if note else None,
+        style="min-width: 150px; flex: 1 1 150px;",
+    )
+
+
+with ui.card(fill=False):
+    ui.card_header("Basin details")
+
+    @render.ui
+    def basin_panel():
+        gage_info = selected_gage.get()
+        if gage_info is None:
+            return ui.div("Select a gage to see how its natural flow was estimated.", class_="text-muted")
+        gage = str(gage_info['gage'])
+        if gage not in basin_info.index:
+            return ui.div("No naturalization details for this gage.", class_="text-muted")
+        b = basin_info.loc[gage]
+
+        dist = f"{b['glover_a_ft'] / 3.28084:,.0f} m ({b['glover_a_ft']:,.0f} ft)"
+        if pd.notna(b['irrigated_km2']):
+            dist_note = f"mean over {b['irrigated_km2']:,.1f} km² irrigated (GMIA-NEXT 2024)"
+        else:
+            dist_note = "no irrigated land mapped; basin median used"
+        cu_note = "share of irrigation diversions consumed; the rest returns"
+        if b['method'] != 'standard':
+            # below reservoirs the estimate comes from the inflow basins and their own parameters
+            unused = " (not used here: the estimate comes from the inflow basins)"
+            dist_note += unused
+            cu_note += unused
+        items = [
+            info_item("Drainage area", f"{b['area_km2']:,.0f} km²"),
+            info_item("Irrigation consumptive use factor", f"{b['irr_cu_factor']:.2f}", cu_note),
+            info_item("Irrigated land to stream", dist, dist_note),
+            info_item("Diversion sites", f"{int(b['n_diversions'])}"),
+        ]
+        if pd.notna(b['nse_usbr']) and np.isfinite(b['nse_usbr']):
+            items.append(info_item("Fit to USBR natural flow (monthly)",
+                                   f"NSE {b['nse_usbr']:.2f}, bias {b['pbias_usbr']:+.0f}%"))
+
+        parts = [
+            ui.div(ui.span("Method: ", class_="text-muted"), METHOD_LABELS.get(b['method'], b['method']),
+                   style="margin-bottom: 8px;"),
+            ui.div(*items, style="display: flex; flex-wrap: wrap; gap: 12px 24px;"),
+        ]
+        if b['method'] == 'below_reservoir' and isinstance(b['inflow_gages'], str) and b['inflow_gages']:
+            rows = []
+            for entry in b['inflow_gages'].split(';'):
+                g, span, n = entry.split(':')
+                first, last = span.split('-')
+                years = f"water year {first}" if n == '1' else f"{n} water years between {first} and {last}"
+                rows.append(ui.tags.li(f"{g} – {gage_names.get(g, '')} (used in {years})"))
+            share = (f"Gaged inflows carry a median {b['median_frac_in']:.0%} of the outflow; "
+                     "the total is scaled up to cover ungaged area."
+                     if pd.notna(b['median_frac_in']) else None)
+            parts += [
+                ui.div("Inflow gages used", class_="text-muted", style="font-size: 0.75rem; margin-top: 10px;"),
+                ui.tags.ul(*rows, style="margin: 2px 0 4px 0; padding-left: 20px; font-size: 0.85rem;"),
+                ui.div(share, class_="text-muted", style="font-size: 0.75rem;") if share else None,
+            ]
+        return ui.div(*parts)

@@ -25,6 +25,7 @@ PIPELINE_DIR = Path(__file__).resolve().parent
 APP_DIR = PIPELINE_DIR.parent                      # shiny-app/ucol_natural
 SPATIAL_DIR = APP_DIR / "spatial_data"             # static spatial inputs (read by app too)
 TIMESERIES_DIR = APP_DIR / "timeseries"            # naturalize.py output, read by the app
+BASIN_INFO_PATH = TIMESERIES_DIR / "basin_info.csv"  # per-basin parameters for the app panel
 
 INPUT_DIR = PIPELINE_DIR / "inputs"                # static inputs that are not downloaded
 DIVERSION_INPUT_DIR = INPUT_DIR / "diversions"     # master table + historical records
@@ -52,6 +53,7 @@ EVAP_RESERVOIRS_PATH = SPATIAL_DIR / "ucol_reservoirs.parquet"       # DRI evap 
 DIVERSION_MASTER_PARQUET = SPATIAL_DIR / "ucrb_diversion_master_table.parquet"  # app copy
 DIVERSION_MASTER_CSV = DIVERSION_INPUT_DIR / "ucrb_diversion_master_table.csv"
 IRRIGATION_PATH = SPATIAL_DIR / "basin_irrigation_percentages.csv"
+DIST2STREAM_PATH = SPATIAL_DIR / "basin_dist2stream_gmia_art-per.csv"   # irr_dist2stream.py
 DIST_MATRIX_PATH = SPATIAL_DIR / "dist_matrix.csv"
 USBR_NAT_FLOWS_PATH = SPATIAL_DIR / "usbr_nat_flows.csv"
 

@@ -1,0 +1,286 @@
+gage,name,n_pixels,irrigated_km2,mean_dist_m,median_dist_m,p90_dist_m,mean_dist_ft
+09010500,"Colorado River Below Baker Gulch Nr Grand Lake, CO",0,0.0,,,,
+09014050,"Grand Lake Outlet Blw Chipmunk Ln At Grand Lk, CO",0,0.0,,,,
+09015000,"Colorado River Bl Shadow Mountain Reservoir, CO",6,0.005,596.772,588.367,651.011,1957.912
+09019000,"Colorado River Below Lake Granby, CO",6,0.005,596.772,588.367,651.011,1957.912
+09019500,"Colorado River Near Granby, CO",6,0.005,596.772,588.367,651.011,1957.912
+09021000,"Willow Creek Below Willow Creek Reservoir, CO",0,0.0,,,,
+09022000,"Fraser River At Upper Sta, Near Winter Park, CO",0,0.0,,,,
+09024000,"Fraser River At Winter Park, CO",0,0.0,,,,
+09025000,"Vasquez Creek At Winter Park, CO",0,0.0,,,,
+09025300,"Elk Creek At Upper Station, Near Fraser, CO",0,0.0,,,,
+09026500,"St. Louis Creek Near Fraser, CO",0,0.0,,,,
+09027100,"Fraser River At Tabernash, CO",0,0.0,,,,
+09032000,"Ranch Creek Near Fraser, CO",0,0.0,,,,
+09032050,"Little Cabin Creek Near Tabernash, CO",0,0.0,,,,
+09032100,"Cabin Creek Near Fraser, CO",0,0.0,,,,
+09032200,"Hamilton Creek Near Tabernash, CO",0,0.0,,,,
+09032300,"Hurd Creek Near Tabernash, CO",0,0.0,,,,
+09032400,"Trail Creek Near Tabernash, CO",0,0.0,,,,
+09032990,"Meadow Creek Blw Meadow Creek Res Nr Tabernash, CO",0,0.0,,,,
+09033100,"Ranch Creek Blw Meadow Cr Nr Tabernash, CO",0,0.0,,,,
+09033300,"Fraser River Blw Crooked Cr At Tabernash, CO",0,0.0,,,,
+09034250,"Colorado River At Windy Gap, Near Granby, CO",39,0.032,308.966,229.746,592.206,1013.669
+09034900,"Bobtail Creek Near Jones Pass, CO",0,0.0,,,,
+09035500,"Williams Fork Below Steelman Creek, CO",0,0.0,,,,
+09035700,"Williams Fork Above Darling Creek, Near Leal, CO",0,0.0,,,,
+09035900,"South Fork Of Williams Fork Near Leal, CO",0,0.0,,,,
+09036000,"Williams Fork Near Leal, CO",0,0.0,,,,
+09037500,"Williams Fork Near Parshall, CO",461,0.377,389.934,380.096,573.1,1279.31
+09038500,"Williams Fork Below Williams Fork Reservoir, CO",655,0.536,378.124,385.586,592.673,1240.563
+09040500,"Troublesome Creek Near Troublesome, CO",544,0.444,220.821,137.638,721.847,724.478
+09041090,"Muddy Creek Above Antelope Creek Nr. Kremmling, CO",67,0.055,196.509,188.393,295.836,644.714
+09041400,"Muddy Crk Blw Wolford Mtn Reser. Nr Kremmling, CO",729,0.594,314.461,295.26,467.122,1031.695
+09046490,"Blue River At Blue River, CO",0,0.0,,,,
+09046600,"Blue River Near Dillon, CO",0,0.0,,,,
+09047500,"Snake River Near Montezuma, CO",0,0.0,,,,
+09047700,"Keystone Gulch Near Dillon, CO",0,0.0,,,,
+09050100,"Tenmile Creek Bl North Tenmile C, At Frisco, CO",0,0.0,,,,
+09050700,"Blue River Below Dillon, CO",0,0.0,,,,
+09051050,"Straight Cr Blw Laskey Gulch Nr Dillon, CO",0,0.0,,,,
+09053500,"Blue River Above Green Mountain Reservoir, CO",0,0.0,,,,
+09057500,"Blue River Below Green Mountain Reservoir, CO",0,0.0,,,,
+09058000,"Colorado River Near Kremmling, CO",3590,2.933,306.407,278.843,558.726,1005.271
+09058500,"Piney River Below Piney Lake, Near Minturn, CO",0,0.0,,,,
+09059500,"Piney River Near State Bridge, CO",0,0.0,,,,
+09060770,"Rock Creek At Mccoy, CO",1298,1.062,304.994,304.148,484.862,1000.635
+09060799,"Colorado River At Catamount Bridge, CO",5248,4.289,301.947,279.726,533.246,990.64
+09061600,"East Fork Eagle River Near Climax, CO",0,0.0,,,,
+09063000,"Eagle River At Red Cliff, CO",0,0.0,,,,
+09063900,"Missouri Creek Near Gold Park, CO",0,0.0,,,,
+09064000,"Homestake Creek At Gold Park, CO",0,0.0,,,,
+09064600,"Eagle River Near Minturn, CO",0,0.0,,,,
+09065100,"Cross Creek Near Minturn, CO",0,0.0,,,,
+09065500,"Gore Creek At Upper Station, Near Minturn, CO",0,0.0,,,,
+09066000,"Black Gore Creek Near Minturn, CO",0,0.0,,,,
+09066200,"Booth Creek Near Minturn, CO",0,0.0,,,,
+09066300,"Middle Creek Near Minturn, CO",0,0.0,,,,
+09066325,"Gore Creek Abv Red Sandstone Creek At Vail, CO",0,0.0,,,,
+09066510,"Gore Creek At Mouth Near Minturn, CO",0,0.0,,,,
+09067000,"Beaver Creek At Avon, CO",0,0.0,,,,
+09067020,"Eagle R Blw Wastewater Treatment Plant At Avon, CO",17,0.014,323.567,324.551,399.335,1061.572
+09067200,"Lake Creek Near Edwards, CO",34,0.028,208.868,210.831,254.456,685.261
+09070000,"Eagle River Below Gypsum, CO",5794,4.764,170.461,155.27,324.403,559.255
+09070500,"Colorado River Near Dotsero, CO",20995,17.207,325.351,272.921,664.447,1067.426
+09071295,"Grizzly Creek Nr Grizzly Lake Nr Glenwood Spgs, CO",0,0.0,,,,
+09072550,"Roaring Fork River Abv Lost Man Cr Near Aspen, CO",0,0.0,,,,
+09073005,"Lincoln Creek Below Grizzly Reservoir Nr Aspen, CO",0,0.0,,,,
+09073300,"Roaring Fork River Ab Difficult C Nr Aspen, CO",0,0.0,,,,
+09073400,"Roaring Fork River Near Aspen, CO",0,0.0,,,,
+09074500,"Hunter Creek At Aspen, CO",0,0.0,,,,
+09076000,"Maroon Creek Near Aspen, CO",0,0.0,,,,
+09076300,"Roaring Fork River Blw Maroon Creek Nr Aspen, CO",398,0.329,186.823,152.366,464.498,612.936
+09078141,"North Cunningham Creek Conduit Bypass Nr, Norrie,Co",0,0.0,,,,
+09078475,"Last Chance Creek Near Norrie, CO",0,0.0,,,,
+09079450,"Lime Creek Near Thomasville, CO",0,0.0,,,,
+09080400,"Fryingpan River Near Ruedi, CO",0,0.0,,,,
+09081000,"Roaring Fork River Near Emma, CO",3111,2.569,230.887,206.832,430.064,757.504
+09081600,"Crystal River Abv Avalanche Crk, Near Redstone, CO",23,0.019,156.037,155.265,195.164,511.932
+09085000,"Roaring Fork River At Glenwood Springs, CO",18870,15.568,284.896,239.774,576.281,934.698
+09085100,"Colorado River Below Glenwood Springs, CO",39912,32.813,305.94,256.296,626.778,1003.741
+09085500,"Canyon Creek Near New Castle, CO",160,0.132,122.051,121.868,193.512,400.429
+09087500,"Elk Creek At New Castle, CO",4825,3.967,438.063,341.298,979.132,1437.216
+09090785,"Divide Creek Near Silt, CO",7927,6.534,299.075,279.394,537.465,981.216
+09093500,"Parachute Creek At Parachute, CO",1250,1.03,106.501,103.274,176.93,349.413
+09095500,"Colorado River Near Cameo, CO",96952,79.798,327.179,259.956,669.433,1073.423
+09105000,"Plateau Creek Near Cameo, CO",25889,21.416,463.126,404.979,879.195,1519.441
+09106150,"Colo River Below Grand Valley Div Nr Palisade, CO",123858,102.057,355.109,288.276,717.476,1165.057
+09107000,"Taylor River At Taylor Park, CO",0,0.0,,,,
+09107500,"Texas Creek At Taylor Park, CO",0,0.0,,,,
+09108250,"Willow Creek Above Taylor Park Reservoir, CO",0,0.0,,,,
+09109000,"Taylor River Below Taylor Park Reservoir, CO",0,0.0,,,,
+09110000,"Taylor River At Almont, CO",0,0.0,,,,
+09110990,"Elk Creek At Coal Creek Abv Crested Butte, CO",0,0.0,,,,
+09111250,"Coal Creek Abv Mccormick Dtch At Crested Butte, CO",0,0.0,,,,
+09112200,"East River Below Cement Creek Nr Crested Butte, CO",0,0.0,,,,
+09112500,"East River At Almont, CO",0,0.0,,,,
+09113500,"Ohio Creek Near Baldwin, CO",0,0.0,,,,
+09113980,"Ohio Creek Above Mouth Nr Gunnison, CO",336,0.28,201.678,202.77,306.965,661.672
+09114500,"Gunnison River Near Gunnison, CO",646,0.539,189.167,180.228,305.239,620.628
+09114520,"Gunnison River At Gunnison Whitewater Park, CO",646,0.539,189.167,180.228,305.239,620.628
+09115500,"Tomichi Creek At Sargents, CO",0,0.0,,,,
+09118450,"Cochetopa Creek Below Rock Creek Near Parlin, CO",0,0.0,,,,
+09119000,"Tomichi Creek At Gunnison, CO",0,0.0,,,,
+09123450,"Lake Fork Blw Lake San Cristobal Nr Lake City, CO",0,0.0,,,,
+09124010,"Henson Creek At Lake City, CO",0,0.0,,,,
+09124500,"Lake Fork At Gateview, CO",10,0.008,372.527,390.47,421.631,1222.201
+09126000,"Cimarron River Near Cimarron, CO",0,0.0,,,,
+09127000,"Cimarron River Blw Cimarron Creek At Cimarron, CO",1078,0.902,314.894,269.614,575.243,1033.116
+09129600,"Smith Fork Near Lazear, CO",13159,10.967,425.748,404.035,729.328,1396.811
+09132050,"Anthracite Creek Near Somerset, CO",0,0.0,,,,
+09132095,"Anthracite Creek Above Mouth Near, Somerset",17,0.014,442.287,448.981,487.036,1451.073
+09132500,"North Fork Gunnison River Near Somerset, CO",932,0.772,214.764,212.495,361.086,704.606
+09132960,"Hubbard Creek At Highway 133 At Mouth Nr Bowie, CO",30,0.025,550.318,566.814,649.923,1805.506
+09134100,"North Fork Gunnison River Below Paonia, CO",4481,3.721,230.845,222.062,383.933,757.364
+09135920,"Leroux Creek Above Mouth Near Hotchkiss, CO",4230,3.517,329.993,294.953,592.704,1082.656
+09136100,"North Fk Gunnison River Above Mouth Nr Lazear, CO",59416,49.426,407.006,336.261,810.421,1335.32
+09143000,"Surface Creek Near Cedaredge, CO",0,0.0,,,,
+09143500,"Surface Creek At Cedaredge, CO",22,0.018,129.75,130.481,157.522,425.69
+09144250,"Gunnison River At Delta, CO",133130,110.783,391.911,330.604,764.251,1285.797
+09146020,"Uncompahgre River Near Ouray, CO",0,0.0,,,,
+09146200,"Uncompahgre River Near Ridgway, CO",2761,2.318,319.333,259.341,612.956,1047.68
+09147000,"Dallas Creek Near Ridgway, CO",2510,2.107,293.765,269.873,490.977,963.797
+09147025,"Uncompahgre River Below Ridgway Reservoir, CO",5667,4.757,298.568,254.47,533.78,979.553
+09147500,"Uncompahgre River At Colona, CO",9590,8.045,316.421,279.224,566.797,1038.128
+09149500,"Uncompahgre River At Delta, CO",197134,164.603,264.029,219.443,511.777,866.237
+09151500,"Escalante Creek Near Delta, CO",767,0.639,213.345,185.62,407.485,699.95
+09152500,"Gunnison River Near Grand Junction, CO",400111,333.582,302.388,245.963,597.119,992.087
+09153300,"Reed Wash Near Loma, CO",35694,29.511,173.696,149.386,346.284,569.868
+09163492,"Salt Creek Near Mouth Near Mack, CO",20417,16.873,237.843,196.135,457.201,780.325
+09163500,"Colorado River Near Colorado-Utah State, Line",664482,551.889,291.189,232.739,586.299,955.343
+09165000,"Dolores River Below Rico, CO",0,0.0,,,,
+09166500,"Dolores River At Dolores, CO",683,0.578,221.948,211.3,326.699,728.175
+09166950,"Lost Canyon Creek Near Dolores, CO",150,0.127,73.557,69.269,140.198,241.328
+09168730,"Dolores River Near Slick Rock, CO",4946,4.178,503.331,448.79,955.951,1651.347
+09169500,"Dolores River At Bedrock, CO",9022,7.593,405.845,351.493,753.687,1331.512
+09171100,"Dolores River Near Bedrock, CO",22794,19.12,379.789,308.544,771.41,1246.027
+09171240,"Lake Fork San Miguel Rv Abv Trout Lake Nr Ophir, CO",0,0.0,,,,
+09171310,"South Fork San Miguel River Near Ophir, CO",0,0.0,,,,
+09172500,"San Miguel River Near Placerville, CO",0,0.0,,,,
+09174600,"San Miguel River At Brooks Bridge Near Nucla, CO",630,0.528,134.041,114.975,235.277,439.766
+09177000,"San Miguel River At Uravan, CO",41895,35.149,299.904,256.729,590.932,983.936
+09179450,"Dolores River Near Gateway, CO",65188,54.686,335.7,273.656,658.228,1101.378
+09180000,"Dolores River Near Cisco, UT",68099,57.112,329.499,266.591,649.182,1081.033
+09180500,"Colorado River Near Cisco, UT",737115,612.746,295.948,236.52,595.648,970.959
+09182400,"Castle Creek Below Castle Valley Near Moab, UT",1019,0.849,278.7,235.978,505.942,914.371
+09184600,"Pack Creek At Pack Creek Road Bridge Near Moab, UT",1,0.001,152.315,152.315,152.315,499.723
+09185100,"Mill Creek Blw Pack Creek Nr Mouth At Moab, UT",3455,2.885,683.939,504.619,1524.919,2243.895
+09185600,"Colorado River At Potash, UT",746274,620.404,299.262,238.332,602.296,981.832
+09188500,"Green River At Warren Bridge, Near Daniel, WY",0,0.0,,,,
+09195000,"Lake Creek Below Willow Lake, Nr Cora, WY",0,0.0,,,,
+09196500,"Pine Creek Above Fremont Lake, WY",0,0.0,,,,
+09201500,"Boulder Creek Above Boulder Lake, Near Boulder, WY",0,0.0,,,,
+09205000,"New Fork River Near Big Piney, WY",3359,2.635,351.534,303.776,681.034,1153.328
+09209400,"Green River Near La Barge, WY",8318,6.538,344.24,313.031,633.897,1129.398
+09210500,"Fontenelle C Nr Herschler Ranch, Nr Fontenelle, WY",0,0.0,,,,
+09211200,"Green River Below Fontenelle Reservoir, WY",13074,10.302,312.734,277.451,579.281,1026.03
+09213500,"Big Sandy River Near Farson, WY",0,0.0,,,,
+09216050,"Big Sandy River At Gasson Bridge, Near Eden, WY",43572,34.504,361.557,300.363,694.235,1186.21
+09217000,"Green River Near Green River, WY",59852,47.363,375.525,302.741,710.482,1232.036
+09217900,"Blacks Fork Near Robertson, WY",0,0.0,,,,
+09218500,"Blacks Fork Near Millburne, WY",0,0.0,,,,
+09219200,"Blacks Fork Above Smiths Fork, Near Lyman, WY",12354,9.902,304.214,280.953,567.388,998.078
+09220000,"East Fork Smiths Fork Near Robertson, WY",0,0.0,,,,
+09222400,"Muddy Creek Near Hampton, WY",1299,1.042,510.233,531.402,757.714,1673.994
+09223000,"Hams Fork Below Pole Creek, Near Frontier, WY",0,0.0,,,,
+09224700,"Blacks Fork Near Little America, WY",23477,18.812,358.252,299.809,660.76,1175.366
+09229500,"Henrys Fork Near Manila, UT",8211,6.614,527.294,388.98,1374.28,1729.967
+09234500,"Green River Near Greendale, UT",102882,81.928,390.752,311.253,734.054,1281.995
+09237450,"Yampa River Above Stagecoach Reservoir, CO",3983,3.248,224.092,208.104,398.526,735.211
+09237500,"Yampa River Below Stagecoach Reservoir, CO",3985,3.249,224.035,208.088,398.47,735.023
+09238900,"Fish Cr At Upper Sta Nr Steamboat Springs, CO",0,0.0,,,,
+09239500,"Yampa River At Steamboat Springs, CO",6977,5.684,263.013,206.031,499.786,862.903
+09240020,"Yampa River Below Soda Creek At Steamboat Spgs, CO",6984,5.689,262.999,206.088,499.724,862.856
+09242500,"Elk River Near Milner, CO",3538,2.866,212.333,177.071,340.441,696.632
+09244490,"Yampa River Above Elkhead Creek Near Hayden, CO",25297,20.551,310.355,225.66,699.079,1018.226
+09246200,"Elkhead Creek Above Long Gulch, Near Hayden, CO",664,0.538,720.206,702.826,1028.046,2362.881
+09246500,"Elkhead Creek Near Craig, CO",1272,1.031,636.097,659.037,963.309,2086.934
+09247600,"Yampa River Below Craig, CO",39538,32.098,378.072,284.906,773.298,1240.393
+09251000,"Yampa River Near Maybell, CO",53689,43.596,396.661,288.572,848.113,1301.383
+09253000,"Little Snake River Near Slater, CO",12,0.01,200.472,206.74,226.002,657.717
+09255000,"Slater Fork Near Slater, CO",322,0.26,335.071,339.231,484.085,1099.313
+09255200,"Little Snake River Ab Savery Cr, Nr Savery, WY",3567,2.874,263.535,216.028,510.66,864.615
+09257000,"Little Snake River Near Dixon, WY",10132,8.161,303.445,246.271,611.812,995.554
+09258050,"Muddy Creek Above Olson Draw, Near Dad, WY",0,0.0,,,,
+09258980,"Muddy Creek Below Young Draw, Near Baggs, WY",231,0.186,248.89,237.813,378.184,816.568
+09259700,"Little Snake River Bl Dry Gulch, Nr Baggs, WY",32942,26.531,256.782,218.763,474.614,842.46
+09260000,"Little Snake River Near Lily, CO",38478,31.009,279.63,235.745,527.292,917.42
+09260050,"Yampa River At Deerlodge Park, CO",103912,84.136,346.649,260.967,716.824,1137.299
+09261000,"Green River Near Jensen, UT",210622,169.161,366.422,283.899,720.484,1202.172
+09261700,"Big Brush Crk Abv Red Fleet Res, Nr Vernal, UT",30,0.024,104.867,105.16,148.886,344.053
+09266500,"Ashley Creek Near Vernal, UT",0,0.0,,,,
+09272400,"Green River At Ouray, Utah",339330,273.856,418.117,317.075,853.8,1371.776
+09277500,"Duchesne River Near Tabiona, UT",13385,10.884,202.88,189.639,365.615,665.618
+09279000,"Rock Creek Near Mountain Home, UT",0,0.0,,,,
+09285900,"Strawberry River At Pinnacles Near Fruitland, UT",0,0.0,,,,
+09288000,"Currant Creek Near Fruitland, UT",143,0.117,184.611,136.411,431.361,605.678
+09288180,"Strawberry River Near Duchesne, UT",5776,4.709,530.858,368.455,1211.857,1741.662
+09289500,"Lake Fork River Ab Moon Lake, Nr Mountain Home, UT",0,0.0,,,,
+09291000,"Lake Fork River Bl Moon Lake Nr Mountain Home, UT",0,0.0,,,,
+09292000,"Yellowstone R @ Bridge Cmpgrnd Nr Altonah, UT",0,0.0,,,,
+09292500,"Yellowstone River Near Altonah, UT",0,0.0,,,,
+09294500,"Lake Fork River Near Myton, UT",41439,33.736,349.899,284.726,689.926,1147.961
+09295000,"Duchesne River At Myton, UT",102422,83.433,296.275,234.526,594.496,972.031
+09295100,"Duchesne Riv Abv Uinta Riv, Nr Randlett, UT",119524,97.381,315.147,248.606,651.038,1033.947
+09299500,"Whiterocks River Near Whiterocks, UT",0,0.0,,,,
+09301500,"Uinta River At Randlett, UT",208278,169.435,357.829,291.229,720.017,1173.979
+09302000,"Duchesne River Near Randlett, UT",331169,269.56,342.81,275.2,695.662,1124.703
+09303000,"North Fork White River At Buford, CO",94,0.077,159.142,155.349,233.859,522.12
+09303400,"South Fork White River Near Budges Resort, CO",3,0.002,93.611,101.463,104.078,307.122
+09304000,"South Fork White River At Buford, CO",219,0.179,150.238,140.021,254.495,492.907
+09304115,"White River Below North Elk Creek Near Buford, CO",405,0.331,146.114,138.068,236.379,479.378
+09304200,"White River Above Coal Creek Near Meeker, CO",2177,1.781,153.294,144.211,244.005,502.931
+09304500,"White River Near Meeker, CO",14042,11.48,251.462,218.654,470.834,825.007
+09304800,"White River Below Meeker, CO",40955,33.479,273.53,226.705,518.109,897.407
+09306200,"Piceance Creek Bl Ryan Gulch, Nr Rio Blanco, CO",3512,2.878,68.654,58.433,136.27,225.242
+09306222,"Piceance Creek At White River, CO",4222,3.459,72.023,60.77,146.119,236.294
+09306242,"Corral Gulch Near Rangely, CO",0,0.0,,,,
+09306255,"Yellow Creek Near White River, CO",40,0.033,54.607,51.906,104.283,179.156
+09306290,"White River Below Boise Creek, Near Rangely, CO",50553,41.326,247.221,199.129,488.974,811.091
+09306500,"White River Near Watson, Utah",54704,44.714,244.226,195.332,480.19,801.265
+09310500,"Fish Creek Above Reservoir, Near Scofield, UT",0,0.0,,,,
+09310700,"Mud Crk Bl Winter Quarters Cyn @ Scofield, UT",0,0.0,,,,
+09311500,"Price River Near Scofield, Utah",0,0.0,,,,
+09312600,"White R Bl Tabbyune Crk Nr Soldier Summit, UT",0,0.0,,,,
+09313520,"Price River Below Golf Course Near Helper, UT",1139,0.936,292.287,246.659,581.172,958.946
+09314250,"Price River Bl Miller Creek Nr Wellington, UT",24328,20.023,398.944,329.187,755.943,1308.872
+09314500,"Price River At Woodside, UT",53054,43.718,534.134,421.535,1162.036,1752.407
+09315000,"Green River At Green River, UT",843814,685.693,398.669,295.796,818.068,1307.969
+09317997,"Huntington Creek Near Huntington, UT",0,0.0,,,,
+09326500,"Ferron Creek (Upper Station) Near Ferron, UT",0,0.0,,,,
+09328000,"San Rafael River Near Castle Dale, Utah",60501,50.049,377.77,308.65,784.903,1239.404
+09328500,"San Rafael River Near Green River, UT",65953,54.574,405.007,323.606,862.347,1328.763
+09328910,"San Rafael River At Mouth Near Green River, UT",66138,54.728,404.209,323.058,861.03,1326.146
+09328920,"Green River At Mineral Bottom Nr Cynlnds Ntl, Park",918292,747.347,406.593,299.264,840.864,1333.966
+09328960,"Colorado River At Gypsum Canyon Near Hite, UT",1665703,1368.706,357.924,269.449,728.191,1174.292
+09329050,"Seven Mile Creek Near Fish Lake, UT",0,0.0,,,,
+09330000,"Fremont River Near Bicknell, UT",43140,36.092,632.657,564.069,1270.307,2075.646
+09330500,"Muddy Creek Near Emery, UT",0,0.0,,,,
+09332100,"Muddy Creek Bl I-70 Nr Emery, Utah",11152,9.266,669.292,641.717,1159.579,2195.839
+09333500,"Dirty Devil R Ab Poison Sp Wsh Nr Hanksville, UT",64217,53.676,613.276,538.35,1235.084,2012.059
+09337000,"Pine Creek Near Escalante, UT",0,0.0,,,,
+09337500,"Escalante River Near Escalante, UT",2815,2.375,438.39,371.125,820.025,1438.288
+09342500,"San Juan River At Pagosa Springs, CO",224,0.19,252.816,210.551,487.75,829.449
+09346400,"San Juan River Near Carracas, CO",726,0.618,235.103,193.31,426.429,771.336
+09349800,"Piedra River Near Arboles, CO",568,0.483,231.383,214.757,375.474,759.131
+09352800,"Los Pinos R Abv Vallecito Res Nr Bayfield, CO",4,0.003,345.246,346.142,358.891,1132.698
+09352900,"Vallecito Creek Near Bayfield, CO",0,0.0,,,,
+09353800,"Los Pinos River Near Ignacio, CO",2369,2.012,232.264,185.533,542.011,762.021
+09354500,"Los Pinos River At La Boca, CO",14118,12.007,288.525,229.714,594.215,946.603
+09355500,"San Juan River Near Archuleta, NM",31774,27.047,378.622,316.188,772.132,1242.198
+09357000,"San Juan River At Bloomfield, NM",40673,34.662,344.626,272.045,718.527,1130.663
+09357700,"San Juan R At Bolack Ranch Brdg Nr Farmington, NM",128556,110.005,796.499,560.844,1838.318,2613.184
+09358000,"Animas River At Silverton, CO",0,0.0,,,,
+09358550,"Cement Creek At Silverton, CO",0,0.0,,,,
+09359010,"Mineral Creek At Silverton, CO",0,0.0,,,,
+09359020,"Animas River Below Silverton, CO",0,0.0,,,,
+09359500,"Animas River At Tall Timber Resort Above, Tacoma,Co",0,0.0,,,,
+09361000,"Hermosa Creek Near Hermosa, CO",0,0.0,,,,
+09361500,"Animas River At Durango, CO",2149,1.823,228.562,216.675,374.713,749.874
+09362520,"Animas River Blw Durango Pump Plant Nr Durango, CO",2497,2.119,286.202,240.688,524.562,938.983
+09363500,"Animas River Near Cedar Hill, NM",31272,26.594,345.329,309.894,655.116,1132.97
+09364010,"Animas River Below Aztec, NM",37869,32.225,308.269,268.283,624.228,1011.382
+09364200,"Animas River At Penny Lane Near Flora Vista, NM",40130,34.157,296.48,251.095,612.946,972.705
+09364500,"Animas River At Farmington, NM",40803,34.733,296.721,249.848,614.926,973.493
+09365000,"San Juan River At Farmington, NM",170934,146.085,672.422,447.055,1647.131,2206.109
+09367000,"La Plata River At La Plata, NM",11537,9.817,678.758,532.491,1460.509,2226.897
+09367500,"La Plata River Near Farmington, NM",14683,12.502,544.878,381.642,1391.034,1787.657
+09367680,"Chaco Wash At Chaco Canyon National Monument, NM",0,0.0,,,,
+09368000,"San Juan River At Shiprock, NM",367730,314.643,865.838,600.381,2010.42,2840.677
+09371000,"Mancos River Near Towaoc, CO",7988,6.78,500.745,444.461,857.344,1642.863
+09371010,"San Juan River At Four Corners, CO",387350,331.317,851.808,584.339,2000.617,2794.646
+09371492,"Mud Creek At State Highway 32, Near Cortez, CO",9476,8.048,557.585,408.16,1292.057,1829.346
+09371520,"Mcelmo Creek Above Trail Canyon Near Cortez, CO",57182,48.496,383.412,320.552,706.508,1257.914
+09372000,"Mcelmo Creek Near Colorado-Utah State, Line",60897,51.649,375.125,311.452,700.849,1230.725
+09378170,"South Creek Above Reservoir Near Monticello, UT",0,0.0,,,,
+09378630,"Recapture Creek Near Blanding, UT",0,0.0,,,,
+09379025,"Chinle Creek At Chinle, AZ",124,0.107,989.381,1203.815,1555.342,3246.0
+09379200,"Chinle Creek Near Mexican Water, AZ",124,0.107,989.381,1203.815,1555.342,3246.0
+09379500,"San Juan River Near Bluff, UT",680984,579.819,785.617,562.302,1806.057,2577.483
+09380000,"Colorado River At Lees Ferry, AZ",2427586,2016.273,490.778,328.734,1084.664,1610.165
+383103106594200,"Gunnison River At Cnty Rd 32 Below Gunnison, CO",730,0.609,177.825,164.02,301.56,583.416
+383926107593001,"Loutsenhizer Arroyo At Hwy 50 Near Olathe, CO",28396,23.694,246.632,213.028,477.98,809.16
+385106106571000,"Slate R Ab Baxter Gl @Hwy 135 Nr Crested Butte, CO",0,0.0,,,,
+391953108130201,"Roan Creek At De Beque, CO",6402,5.277,145.594,132.927,245.94,477.67
+394220106431500,"Eagle River Below Milk Creek Near Wolcott, CO",338,0.278,255.413,227.066,430.545,837.968
+401530105475401,"North Inlet Blw Summerland Park At, Rmnp",0,0.0,,,,
