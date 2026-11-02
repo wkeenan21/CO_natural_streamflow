@@ -79,7 +79,7 @@ ui.page_opts(title=ui.div(
             style="font-size: 0.75rem; font-weight: 400; color: #666666; margin-top: 2px;"
         ),
         style="text-align: left; width: 100%;"
-    ), fillable=False, theme=shinyswatch.theme.solar)
+    ), fillable=False, full_width=True, theme=shinyswatch.theme.solar)
 
 # map + hydrograph fill most of the first screen; the basin panel is below (scroll)
 with ui.layout_column_wrap(width=1/2, height="calc(100vh - 110px)", min_height="500px"):
