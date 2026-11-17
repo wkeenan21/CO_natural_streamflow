@@ -53,7 +53,9 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
 - `naturalize.py`: port of workflow.py's "MERGE DIVERSIONS WITH STREAMFLOW" loop. Basins are
   processed smallest to largest; final `Q_NAT2_cfs` is kept in memory (`nat_store`) for
   below-reservoir basins. Below a reservoir, Q_NAT2 = sum of routed inflow Q_NAT2 / frac_in,
-  so each inflow carries its own basin's Glover lag. frac_in must be fitted on >= 10 good water
+  so each inflow carries its own basin's Glover lag. A basin is below a reservoir when >= 99% of a > 3 km2 reservoir's area
+  is inside it (`RES_INSIDE_FRAC`; a strict `contains` missed Dillon at 09050700) or its name has
+  "below" and "reservoir". frac_in must be fitted on >= 10 good water
   years where the whole inflow set and the outlet overlap (`MIN_INFLOW_YEARS`); otherwise the
   shortest-record gage is dropped and the set reselected (Archuleta keeps Vallecito Creek instead
   of Los Pinos at La Boca). frac_in > 1 is allowed (riparian ET, channel losses, unaccounted CU);

@@ -34,11 +34,11 @@ gage,name,area_km2,method,irr_cu_factor,glover_a_ft,irrigated_km2,n_diversions,i
 09047500,"Snake River Near Montezuma, CO",149.1,standard,0.5284,1713,,1,,,,
 09047700,"Keystone Gulch Near Dillon, CO",23.67,standard,0.5284,1713,,0,,,,
 09050100,"Tenmile Creek Bl North Tenmile C, At Frisco, CO",240.7,standard,0.8,1713,,0,,,,
-09050700,"Blue River Below Dillon, CO",830,standard,0.76,1713,,5,,,,
+09050700,"Blue River Below Dillon, CO",830,below_reservoir,0.76,1713,,5,09046600:1981-2027:47;09047700:1981-2027:47;09050100:1981-2027:47;09047500:1981-2027:46,0.9304,,
 09051050,"Straight Cr Blw Laskey Gulch Nr Dillon, CO",47.51,standard,0.5284,1713,,0,,,,
 09053500,"Blue River Above Green Mountain Reservoir, CO",1306,reservoir_short_record,0.5715,1713,,17,,,,
-09057500,"Blue River Below Green Mountain Reservoir, CO",1494,below_reservoir,0.5461,1713,,22,09050700:1981-2027:47;09051050:1987-2027:41,0.5825,,
-09058000,"Colorado River Near Kremmling, CO",6148,below_reservoir,0.5179,1268,2.933,93,09010500:1981-2027:47;09038500:1981-2027:47;09057500:1981-2027:47;09041400:1995-2027:32;09032000:1981-2024:29;09032100:1984-2024:26;09024000:1981-2024:24;09025000:1981-2024:24;09026500:1981-2024:24;09033300:1999-2027:18;09025300:1997-2024:5;09027100:2014-2020:5;09041090:1991-1994:4,0.624,,
+09057500,"Blue River Below Green Mountain Reservoir, CO",1494,below_reservoir,0.5461,1713,,22,09050700:1981-2027:47;09051050:1987-2027:41,0.5852,,
+09058000,"Colorado River Near Kremmling, CO",6148,below_reservoir,0.5179,1268,2.933,93,09010500:1981-2027:47;09038500:1981-2027:47;09057500:1981-2027:47;09041400:1995-2027:32;09032000:1981-2024:29;09032100:1984-2024:26;09024000:1981-2024:24;09025000:1981-2024:24;09026500:1981-2024:24;09033300:1999-2027:18;09025300:1997-2024:5;09027100:2014-2020:5;09041090:1991-1994:4,0.6135,,
 09058500,"Piney River Below Piney Lake, Near Minturn, CO",33.53,standard,0.5284,1713,,0,,,,
 09059500,"Piney River Near State Bridge, CO",222.7,standard,0.5,1713,,0,,,,
 09060770,"Rock Creek At Mccoy, CO",516.7,standard,0.542,2866,1.062,2,,,,
@@ -58,7 +58,7 @@ gage,name,area_km2,method,irr_cu_factor,glover_a_ft,irrigated_km2,n_diversions,i
 09067020,"Eagle R Blw Wastewater Treatment Plant At Avon, CO",1053,standard,0.8,1125,0.014,5,,,,
 09067200,"Lake Creek Near Edwards, CO",126.6,standard,0.5007,723.3,0.028,3,,,,
 09070000,"Eagle River Below Gypsum, CO",2475,standard,0.5868,2172,4.764,24,,,,
-09070500,"Colorado River Near Dotsero, CO",1.136e+04,below_reservoir,0.5387,1908,17.21,129,09058000:1981-2027:47;09059500:1981-2027:47;09070000:1981-2027:47;09060770:1984-2027:16,0.8572,,
+09070500,"Colorado River Near Dotsero, CO",1.136e+04,below_reservoir,0.5387,1908,17.21,129,09058000:1981-2027:47;09059500:1981-2027:47;09070000:1981-2027:47;09060770:1984-2027:16,0.8585,,
 09071295,"Grizzly Creek Nr Grizzly Lake Nr Glenwood Spgs, CO",15.09,standard,0.5284,1713,,0,,,,
 09072550,"Roaring Fork River Abv Lost Man Cr Near Aspen, CO",23.54,standard,0.5284,1713,,0,,,,
 09073005,"Lincoln Creek Below Grizzly Reservoir Nr Aspen, CO",39.19,below_reservoir,0.5284,1713,,1,,,,
@@ -74,14 +74,14 @@ gage,name,area_km2,method,irr_cu_factor,glover_a_ft,irrigated_km2,n_diversions,i
 09081000,"Roaring Fork River Near Emma, CO",2224,below_reservoir,0.6396,1653,2.569,38,,,,
 09081600,"Crystal River Abv Avalanche Crk, Near Redstone, CO",433.9,standard,0.5299,511.9,0.019,0,,,,
 09085000,"Roaring Fork River At Glenwood Springs, CO",3767,below_reservoir,0.6315,2276,15.57,73,,,,
-09085100,"Colorado River Below Glenwood Springs, CO",1.557e+04,below_reservoir,0.5627,2081,32.81,204,09070500:1981-2027:47;09073400:1981-2027:47;09081600:1981-2027:47,0.735,,
+09085100,"Colorado River Below Glenwood Springs, CO",1.557e+04,below_reservoir,0.5627,2081,32.81,204,09070500:1981-2027:47;09073400:1981-2027:47;09081600:1981-2027:47,0.733,,
 09085500,"Canyon Creek Near New Castle, CO",144.9,standard,0.579,1260,0.132,2,,,,
 09087500,"Elk Creek At New Castle, CO",461,standard,0.6279,1689,3.967,6,,,,
 09090785,"Divide Creek Near Silt, CO",520.4,standard,0.5025,2081,6.534,10,,,,
 09093500,"Parachute Creek At Parachute, CO",509.5,standard,0.5726,482.5,1.03,6,,,,
-09095500,"Colorado River Near Cameo, CO",2.067e+04,below_reservoir,0.5636,2100,79.8,262,09085100:1981-2027:47,0.8814,0.9516,5.126
+09095500,"Colorado River Near Cameo, CO",2.067e+04,below_reservoir,0.5636,2100,79.8,262,09085100:1981-2027:47,0.8814,0.9179,5.237
 09105000,"Plateau Creek Near Cameo, CO",1534,standard,0.552,1913,21.42,42,,,,
-09106150,"Colo River Below Grand Valley Div Nr Palisade, CO",2.265e+04,below_reservoir,0.5621,2051,102.1,308,09095500:1991-2027:37;09105000:1991-2027:37,1.036,,
+09106150,"Colo River Below Grand Valley Div Nr Palisade, CO",2.265e+04,below_reservoir,0.5621,2051,102.1,308,09095500:1991-2027:37;09105000:1991-2027:37,1.035,,
 09107000,"Taylor River At Taylor Park, CO",331.6,standard,0.5,1713,,0,,,,
 09107500,"Texas Creek At Taylor Park, CO",104.8,standard,0.5284,1713,,0,,,,
 09108250,"Willow Creek Above Taylor Park Reservoir, CO",162.9,standard,0.5,1713,,0,,,,
@@ -138,11 +138,11 @@ gage,name,area_km2,method,irr_cu_factor,glover_a_ft,irrigated_km2,n_diversions,i
 09177000,"San Miguel River At Uravan, CO",3888,standard,0.5374,1589,35.15,23,,,,
 09179450,"Dolores River Near Gateway, CO",1.075e+04,below_reservoir,0.5522,1755,54.69,37,09171100:2015-2027:13;09177000:2015-2027:13,0.9898,,
 09180000,"Dolores River Near Cisco, UT",1.186e+04,below_reservoir,0.5501,1708,57.11,39,09177000:1981-2014:32;09166500:1981-2007:18;09171100:1997-2014:14;09179450:2015-2027:13,0.9841,0.8757,-22.89
-09180500,"Colorado River Near Cisco, UT",5.993e+04,below_reservoir,0.5498,2560,612.7,721,09163500:1981-2027:47;09180000:1981-2027:45;09172500:1995-1995:1;09174600:1996-1996:1,1.021,0.8887,13.24
+09180500,"Colorado River Near Cisco, UT",5.993e+04,below_reservoir,0.5498,2560,612.7,721,09163500:1981-2027:47;09180000:1981-2027:45;09172500:1995-1995:1;09174600:1996-1996:1,1.021,0.8494,13.28
 09182400,"Castle Creek Below Castle Valley Near Moab, UT",138.8,standard,0.5284,914.4,0.849,0,,,,
 09184600,"Pack Creek At Pack Creek Road Bridge Near Moab, UT",78.25,standard,0.5284,499.7,0.001,0,,,,
 09185100,"Mill Creek Blw Pack Creek Nr Mouth At Moab, UT",364.5,standard,0.5284,2466,2.885,5,,,,
-09185600,"Colorado River At Potash, UT",6.369e+04,below_reservoir,0.5498,2555,620.4,726,09180500:2015-2027:13,1.015,,
+09185600,"Colorado River At Potash, UT",6.369e+04,below_reservoir,0.5498,2555,620.4,726,09180500:2015-2027:13,1.01,,
 09188500,"Green River At Warren Bridge, Near Daniel, WY",1194,standard,0.5284,1713,,2,,,,
 09195000,"Lake Creek Below Willow Lake, Nr Cora, WY",82.69,standard,0.5284,1713,,0,,,,
 09196500,"Pine Creek Above Fremont Lake, WY",196.3,standard,0.5284,1713,,0,,,,
@@ -274,7 +274,7 @@ gage,name,area_km2,method,irr_cu_factor,glover_a_ft,irrigated_km2,n_diversions,i
 09379025,"Chinle Creek At Chinle, AZ",1687,standard,0.5284,7133,0.107,0,,,,
 09379200,"Chinle Creek Near Mexican Water, AZ",9455,standard,0.5284,7133,0.107,0,,,,
 09379500,"San Juan River Near Bluff, UT",5.96e+04,below_reservoir,0.6366,4371,579.8,166,09371010:1981-2027:47;09372000:1981-2027:47;09378170:1986-2027:39;09378630:1982-2027:17;09379200:1981-1981:1,0.9691,0.9154,10.27
-09380000,"Colorado River At Lees Ferry, AZ",2.8e+05,below_reservoir,0.5679,3154,2016,1389,09166500:1981-2027:47;09337500:1981-2027:47;09379500:1981-2027:47;09180500:1981-2014:34;09315000:1981-2014:34;09326500:1981-2014:34;09333500:1981-2027:33;09182400:1993-2014:22;09317997:1981-2002:18;09330000:1989-2025:14;09330500:1989-2025:14;09185600:2015-2027:13;09328920:2015-2027:13,0.9537,0.9128,10.1
+09380000,"Colorado River At Lees Ferry, AZ",2.8e+05,below_reservoir,0.5679,3154,2016,1389,09166500:1981-2027:47;09337500:1981-2027:47;09379500:1981-2027:47;09180500:1981-2014:34;09315000:1981-2014:34;09326500:1981-2014:34;09333500:1981-2027:33;09182400:1993-2014:22;09317997:1981-2002:18;09330000:1989-2025:14;09330500:1989-2025:14;09185600:2015-2027:13;09328920:2015-2027:13,0.9545,0.8962,9.897
 383103106594200,"Gunnison River At Cnty Rd 32 Below Gunnison, CO",5327,reservoir_short_record,0.5021,1389,0.609,209,,,,
 383926107593001,"Loutsenhizer Arroyo At Hwy 50 Near Olathe, CO",189.3,standard,0.5121,3673,23.69,0,,,,
 385106106571000,"Slate R Ab Baxter Gl @Hwy 135 Nr Crested Butte, CO",186.9,standard,0.5337,1713,,2,,,,

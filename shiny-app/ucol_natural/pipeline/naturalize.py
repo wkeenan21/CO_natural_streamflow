@@ -67,6 +67,9 @@ GLOVER_MAX_LAG_DAYS = 365 * 5
 # frac_in > 1 (gaged inflow exceeds the outlet's natural flow) is kept: riparian ET, channel
 # losses and unaccounted consumptive use can make natural flow decrease downstream.
 MIN_INFLOW_YEARS = 10
+# A reservoir (> 3 km2) puts a basin on the below-reservoir path when at least this fraction of
+# its area is inside the basin.
+RES_INSIDE_FRAC = 0.99
 
 # basins dropped from the analysis ("chipmunk outlet thing" etc.)
 EXCLUDED_BASINS = ['09014050', '09060799', '09019000']
@@ -237,7 +240,8 @@ def load_inputs():
 
     inp = {}
     reservoir_gdf = gpd.read_parquet(C.RESERVOIRS_PATH).to_crs(epsg=C.PROJ_CRS)
-    inp['reservoirs'] = reservoir_gdf[reservoir_gdf.areasqkm > 3]
+    inp['reservoirs'] = reservoir_gdf[reservoir_gdf.areasqkm > 3].copy()
+    inp['reservoirs']['geometry'] = inp['reservoirs'].geometry.make_valid()
 
     basins = gpd.read_parquet(C.BASINS_PATH)
     basins.geometry = basins.geometry.to_crs(C.PROJ_CRS)
@@ -407,7 +411,13 @@ def naturalize_gage(gage, inp, nat_store):
     # ---- basins below major reservoirs ----
     import geopandas as gpd
     basin = basins[basins.index == gage]
-    basin_res = gpd.sjoin(basin, inp['reservoirs'], how='inner', predicate='contains')
+    # A reservoir counts if >= RES_INSIDE_FRAC of its area is inside the basin. A strict
+    # `contains` misses reservoirs whose NHD polygon pokes past the delineated outlet at the
+    # dam (Dillon is 99.92% inside 09050700).
+    bgeom = basin.geometry.iloc[0]
+    res = inp['reservoirs']
+    res = res[res.intersects(bgeom)]
+    basin_res = res[res.geometry.intersection(bgeom).area / res.area >= RES_INSIDE_FRAC]
     days = df['Q_cfs'].notna().sum()  # need 10 years of data
     name = name_dict[gage].lower()
     if (len(basin_res) > 0 and days > 3650) or ('below' in name and 'reservoir' in name):
