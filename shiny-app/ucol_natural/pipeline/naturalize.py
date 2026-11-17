@@ -11,7 +11,8 @@ For each basin, smallest to largest:
   Q_NAT_cfs   = Q_cfs - evap_cfs - Q_CU_cfs   (add back consumptive use and reservoir evap)
   Q_NAT2_cfs  = Q_NAT_cfs with irrigation diversions removed and Glover-lagged return
                 flows added back (floored at 0). Below major reservoirs, Q_NAT2_cfs is
-                rebuilt from Muskingum-routed naturalized inflow gages scaled by frac_in;
+                rebuilt from Muskingum-routed naturalized inflow gages scaled by frac_in
+                (fitted on >= MIN_INFLOW_YEARS water years of overlap with the inflow set);
                 reservoir basins with <= 10 years of record get NaN.
   Q_NATUSBR_cfs  USBR monthly natural flow spread to daily, for comparison.
 
@@ -24,6 +25,8 @@ Outputs
   pipeline/data/inflow_validation.csv                     leave-one-out test of the below-reservoir
                                                           scaling: NSE/PBIAS per (basin, inflow gage)
   pipeline/data/inflow_validation_by_year.csv             the same per water year
+  pipeline/data/frac_in.csv                               below-reservoir frac_in per (basin, water
+                                                          year), with its inflow set and overlap
   spatial_data/ucrb_diversion_master_table.parquet        diversion points for the app map
 """
 import argparse
@@ -56,12 +59,17 @@ GLOVER_T = 5000.0         # transmissivity (ft^2/day)
 GLOVER_S = 0.20           # specific yield
 GLOVER_MAX_LAG_DAYS = 365 * 5
 
+# Below reservoirs, frac_in is fitted on the days when the whole inflow set and the outlet have
+# natural flow. That overlap must cover at least MIN_INFLOW_YEARS good water years (< 37 missing
+# days), or reservoir storage changes don't average out (e.g. Los Pinos at La Boca, 8 years,
+# pushed Archuleta's frac_in above 1). If it is shorter, the inflow gage with the shortest
+# record is dropped and the set is reselected (Archuleta falls back to Vallecito Creek).
+# frac_in > 1 (gaged inflow exceeds the outlet's natural flow) is kept: riparian ET, channel
+# losses and unaccounted consumptive use can make natural flow decrease downstream.
+MIN_INFLOW_YEARS = 10
+
 # basins dropped from the analysis ("chipmunk outlet thing" etc.)
 EXCLUDED_BASINS = ['09014050', '09060799', '09019000']
-
-# leave-one-out validation below reservoirs: only evaluate an inflow gage in years when it
-# carries at least this share of the basin's estimated natural flow (Q_NAT2)
-MIN_VALIDATION_SHARE = 0.05
 
 
 # --------------------------------------------------------------------------
@@ -450,10 +458,42 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
     flow_subset = pd.concat([nat_store[c].rename(c) for c in contained_gages]
                             + [df['Q_NAT_cfs'].rename(gage)], axis=1, join='outer')
 
-    # for each year, find the inflow gages with good data and use them to naturalize flow
-    years = df['Q_cfs'].dropna().index.year.unique()
+    # good water years (< 37 missing days) of a set of columns, all present on the same days
+    fwy = flow_subset.index.year + (flow_subset.index.month >= 10)
+
+    def n_good_years(cols):
+        return int((flow_subset[cols].isna().any(axis=1).groupby(fwy).sum() < 37).sum())
+
+    # drop inflow gages that alone have too short a natural-flow record (MIN_INFLOW_YEARS)
+    good_years = pd.Series({g: n_good_years([g]) for g in contained_gages}, dtype=int)
+    short = good_years[good_years < MIN_INFLOW_YEARS]
+    if len(short):
+        print(f'  {gage}: inflow gages with < {MIN_INFLOW_YEARS} years not used: '
+              + ', '.join(f'{g} ({n})' for g, n in short.items()))
+        rd['short_inflows'] = list(short.index)
+    contained_gages = [g for g in contained_gages if g not in short.index]
+    contained = contained[contained.index.isin(contained_gages)]
+    frac_rows = rd['_frac_in'] = []  # -> frac_in.csv
+
+    def select(candidates):
+        """Largest non-overlapping sub-basins first; returns (gages, union geometry)."""
+        chosen, union_geom = [], None
+        for idx, subbasin in contained[contained.index.isin(candidates)].iterrows():
+            geom = subbasin.geometry
+            if union_geom is None:
+                chosen.append(idx)
+                union_geom = geom
+            elif geom.intersection(union_geom).area / geom.area < 0.01:  # edge effects only
+                chosen.append(idx)
+                union_geom = union_geom.union(geom)
+        return chosen, union_geom
+
+    # for each water year, find the inflow gages with good data and use them to naturalize flow
+    qdates = df['Q_cfs'].dropna().index
+    years = (qdates.year + (qdates.month >= 10)).unique()
     all_inflows = []
     inflow_gages, frac_covered = [], 0.0
+    short_overlap = set()  # gages dropped because the set's overlap was too short
     for year in years:
         startwy = pd.Timestamp(year=year - 1, month=10, day=1)
         endwy = pd.Timestamp(year=year, month=9, day=30)
@@ -472,19 +512,24 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
             continue
 
         ydf = ydf[use]
-        yb = contained[contained.index.isin(use)]
 
-        # iteratively select non-overlapping sub-basins, biggest first
-        inflow_gages = []
-        union_geom = None
-        for idx, subbasin in yb.iterrows():
-            geom = subbasin.geometry
-            if union_geom is None:
-                inflow_gages.append(idx)
-                union_geom = geom
-            elif geom.intersection(union_geom).area / geom.area < 0.01:  # edge effects only
-                inflow_gages.append(idx)
-                union_geom = union_geom.union(geom)
+        # select the inflow set; while its overlap with the outlet is too short to fit frac_in,
+        # drop the gage with the shortest record and reselect (a nested gage may take its place)
+        candidates = list(use)
+        while True:
+            inflow_gages, union_geom = select(candidates)
+            if not inflow_gages or n_good_years(inflow_gages + [gage]) >= MIN_INFLOW_YEARS:
+                break
+            worst = min(inflow_gages, key=lambda g: good_years[g])
+            short_overlap.add(worst)
+            candidates.remove(worst)
+
+        if not inflow_gages:
+            print(f'  no inflow set with {MIN_INFLOW_YEARS} years of overlap, cant reservoir '
+                  f'naturalize for {year, gage}')
+            df.loc[startwy:endwy, 'Q_NAT2_cfs'] = np.nan
+            rd[f'{year}_inflows'] = False
+            continue
 
         frac_covered = union_geom.area / basin.geometry.iloc[0].area
         if frac_covered < 0.33:  # not enough inflow gages, can't naturalize at this scale
@@ -503,6 +548,11 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
         frac_in = gaged_total / overlap[gage].sum()
         rd[f'{year}_frac_inflow'] = frac_in
         rd[f'{year}_frac_gaged_inflow_area'] = frac_covered
+        frac_rows.append({'gage': gage, 'name': rd['name'], 'water_year': year,
+                          'inflow_gages': ';'.join(inflow_gages), 'frac_in': frac_in,
+                          'frac_covered': frac_covered,
+                          'overlap_start': overlap.index.min(), 'overlap_end': overlap.index.max(),
+                          'overlap_water_years': n_good_years(inflow_gages + [gage])})
 
         # leave-one-out test of the ungaged-inflow scaling. The stored value is
         # frac_in_test / frac_in = share of gaged inflow from the other gages. It is computed
@@ -513,6 +563,10 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
                 inflow_copy = [g for g in inflow_gages if g != igage]
                 rd[f'{year}_{igage}_frac_inflow'] = overlap[inflow_copy].sum(axis=1).sum() / gaged_total
 
+    if short_overlap:
+        print(f'  {gage}: inflow gages dropped in some years (set overlap < {MIN_INFLOW_YEARS} '
+              f'years): {sorted(short_overlap)}')
+        rd['short_overlap_inflows'] = sorted(short_overlap)
     if len(all_inflows) == 0:
         return
 
@@ -541,7 +595,7 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
 
         if frac_in > 0.5:
             # < 1: assume the unaccounted area behaves like the gaged inflows
-            # > 1: the reservoir may be releasing stored flows
+            # > 1: natural losses downstream (riparian ET, channel losses) or unaccounted CU
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = ydf['inflow_sum_routed'] / frac_in
         else:  # frac in <= 0.5
             df.loc[startwy:endwy, 'Q_NAT2_cfs'] = np.nan
@@ -556,10 +610,11 @@ def reservoir_naturalize(gage, df, rd, basin, area, inp, nat_store):
             key = f'{year}_{igage}_frac_inflow'
             if key not in rd:
                 continue
-            # skip gages that are a small piece of the basin (e.g. Escalante at Lees Ferry)
+            # skip gages that are a small piece of the basin (e.g. Escalante at Lees Ferry) or
+            # so large the others couldn't naturalize the basin without them (C.*_VALIDATION_SHARE)
             share = ydf.loc[has_flow, igage].sum() / nat_total if nat_total > 0 else np.nan
             rd[f'{year}_{igage}_share'] = share
-            if not share >= MIN_VALIDATION_SHARE:
+            if not C.MIN_VALIDATION_SHARE <= share <= C.MAX_VALIDATION_SHARE:
                 continue
             inflow_copy = [g for g in y_inflows if g != igage]
             others = ai_df.loc[startwy:endwy, inflow_copy].sum(axis=1, skipna=False)
@@ -659,7 +714,7 @@ def main():
         wanted = set(order)
 
     nat_store, results, info, skipped = {}, [], [], []
-    val_summary, val_yearly = [], []
+    val_summary, val_yearly, frac_rows = [], [], []
     for gage in order:
         if gage not in inp['flow'].columns:
             skipped.append(gage)
@@ -667,6 +722,7 @@ def main():
         df, rd = naturalize_gage(gage, inp, nat_store)
         nat_store[gage] = df['Q_NAT2_cfs']
         summary_rows, yearly_rows = rd.pop('_validation', ([], []))
+        gage_frac_rows = rd.pop('_frac_in', [])
         if gage in wanted:
             df.reset_index(names='date').to_parquet(C.NATURALIZED_FULL_DIR / f"{gage}.parquet", index=False)
             small = df[app_columns(df)].reset_index(names='date')
@@ -675,6 +731,7 @@ def main():
             info.append(basin_info_row(rd, basins.loc[gage, 'area_km2']))
             val_summary += summary_rows
             val_yearly += yearly_rows
+            frac_rows += gage_frac_rows
             print(f"processed {gage} ({rd['name']}): {rd['n_diversions']} diversions")
 
     if skipped:
@@ -687,7 +744,12 @@ def main():
     info.sort_values('gage').to_csv(C.BASIN_INFO_PATH, index=False, float_format='%.4g')
     pd.DataFrame(val_summary, columns=VAL_SUMMARY_COLS).to_csv(C.INFLOW_VALIDATION_PATH, index=False)
     pd.DataFrame(val_yearly, columns=VAL_YEARLY_COLS).to_csv(C.INFLOW_VALIDATION_YEARLY_PATH, index=False)
+    frac = pd.DataFrame(frac_rows)
+    frac.to_csv(C.FRAC_IN_PATH, index=False)
     print(f"inflow validation: {len(val_summary)} inflow gages in {C.INFLOW_VALIDATION_PATH}")
+    if len(frac):
+        print(f"frac_in: {len(frac)} basin-years in {C.FRAC_IN_PATH}, "
+              f"{(frac['frac_in'] > 1).sum()} above 1")
     print(f"wrote {len(results)} gages to {C.TIMESERIES_DIR}; diagnostics in {C.NAT_RESULTS_PATH}")
 
 

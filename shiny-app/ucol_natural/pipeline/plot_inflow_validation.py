@@ -1,220 +1,169 @@
 """
-Plot the leave-one-out test of the below-reservoir ungaged-inflow scaling.
+Plot the leave-one-out test of the below-reservoir ungaged-inflow scaling over time.
 
-Run naturalize.py first; it writes pipeline/data/inflow_validation.csv and
-inflow_validation_by_year.csv. Each row there is one inflow gage, held out and
-predicted from the other inflow gages of a below-reservoir basin.
+Run naturalize.py first; it writes pipeline/data/inflow_validation_by_year.csv (one daily NSE
+per basin, held-out inflow gage and water year) and the daily held-out series (igage_<gage>
+observed, test_<gage> predicted from the other inflow gages) in
+pipeline/data/naturalized_full/<basin>.parquet.
 
     python pipeline/plot_inflow_validation.py
     python pipeline/plot_inflow_validation.py --hydrographs   # also daily obs vs predicted PDF
 
-Outputs (pipeline/data/plots/)
-  inflow_validation_scores.png    NSE and PBIAS per inflow gage, grouped by basin
-  inflow_validation_share.png     NSE vs the gage's share of the basin's natural flow
-  inflow_validation_yearly.png    per-water-year PBIAS of each inflow gage
-  inflow_validation_hydrographs.pdf  (--hydrographs) one page per basin / inflow gage
+Only water years in which the held-out gage carries between C.MIN_VALIDATION_SHARE and
+C.MAX_VALIDATION_SHARE (common.py) of the basin's estimated natural flow are used, limited to
+water years WATER_YEARS and to inflow gages with at least MIN_GAGE_YEARS such years. The filter
+is applied here too, so tightening the bounds needs no naturalize.py rerun (loosening the
+minimum below the value naturalize.py ran with has no effect: those years were never predicted).
 
-The whole-record PBIAS is close to 0 by construction (the scaling ratio is fitted on
-the same record), so the yearly PBIAS plot is the better view of volume error.
+Outputs (pipeline/data/plots/)
+  inflow_validation_by_year.png       left: median NSE (top) and percent bias (bottom) per water
+                                      year, interquartile range shaded; right: map of held-out
+                                      inflow gages colored by median yearly NSE (basemap tiles
+                                      need contextily and internet; skipped otherwise)
+  inflow_validation_by_year_stats.csv numbers behind the left panels
+  inflow_validation_by_gage_stats.csv numbers behind the map
+  inflow_validation_hydrographs.pdf   (--hydrographs) one page per basin / inflow gage
 """
 import argparse
 import sys
 from pathlib import Path
 
 import matplotlib
-import matplotlib.ticker
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C
 
-BLUE, ORANGE = "#2a78d6", "#eb6834"        # observed / predicted (validated pair)
-INK, INK2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
-SURFACE = "#fcfcfb"
 
-plt.rcParams.update({
-    "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
-    "axes.edgecolor": GRID, "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
-    "text.color": INK, "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.8,
-    "axes.axisbelow": True, "axes.spines.top": False, "axes.spines.right": False,
-    "font.size": 9,
-})
-
-
-def short(name, n=34):
-    if not isinstance(name, str):
-        return "?"
-    # USGS names are upper case; title-case them but keep state codes ("..., CO")
-    head, sep, tail = name.rpartition(", ")
-    name = (head.title() + sep + tail) if sep and len(tail) == 2 else name.title()
-    return name if len(name) <= n else name[:n - 1] + "…"
+WATER_YEARS = (1980, 2026)   # complete water years only (WY2027 is a few October weeks)
+MIN_GAGE_YEARS = 5           # drop held-out inflow gages scored in fewer water years
 
 
 def load():
-    for p in [C.INFLOW_VALIDATION_PATH, C.INFLOW_VALIDATION_YEARLY_PATH]:
-        if not p.exists():
-            raise SystemExit(f"{p} not found; run pipeline/naturalize.py first")
-    dtype = {"gage": str, "inflow_gage": str}
-    s = pd.read_csv(C.INFLOW_VALIDATION_PATH, dtype=dtype)
-    y = pd.read_csv(C.INFLOW_VALIDATION_YEARLY_PATH, dtype=dtype)
-    if s.empty:
-        raise SystemExit("no inflow gages were evaluated (inflow_validation.csv is empty)")
-    for d in (s, y):
-        d["gage"] = d["gage"].apply(C.fix_gage_id)
-        d["inflow_gage"] = d["inflow_gage"].apply(C.fix_gage_id)
-    # one row per (basin, inflow gage): basins in name order, best NSE first within a basin
-    s = s.sort_values(["name", "nse"], ascending=[True, False]).reset_index(drop=True)
-    s["label"] = [f"{short(n)}  {g}  ({100 * sh:.0f}%)"
-                  for n, g, sh in zip(s["inflow_name"], s["inflow_gage"], s["mean_share"])]
-    return s, y
+    if not C.INFLOW_VALIDATION_YEARLY_PATH.exists():
+        raise SystemExit(f"{C.INFLOW_VALIDATION_YEARLY_PATH} not found; run pipeline/naturalize.py first")
+    y = pd.read_csv(C.INFLOW_VALIDATION_YEARLY_PATH, dtype={"gage": str, "inflow_gage": str})
+    for col in ("gage", "inflow_gage"):
+        y[col] = y[col].apply(C.fix_gage_id)
+    y = y[y["share"].between(C.MIN_VALIDATION_SHARE, C.MAX_VALIDATION_SHARE)]
+    y = y[y["water_year"].between(*WATER_YEARS)].dropna(subset=["nse"])
+    n = y.groupby("inflow_gage")["water_year"].transform("size")
+    return y[n >= MIN_GAGE_YEARS]
 
 
-def basin_bands(ax, s, ypos, xtext):
-    """Shade alternate basin groups and name each group at the top of its rows."""
-    for i, (gname, grp) in enumerate(s.groupby("name", sort=False)):
-        lo, hi = ypos[grp.index].min() - 0.5, ypos[grp.index].max() + 0.5
-        if i % 2 == 0:
-            ax.axhspan(lo, hi, color="#f1f0ec", zorder=0, lw=0)
-        if xtext is not None:
-            ax.text(xtext, lo + 0.1, f"{short(gname, 40)}  {grp['gage'].iloc[0]}",
-                    transform=ax.get_yaxis_transform(), ha="left", va="top",
-                    fontsize=8, fontweight="bold", color=INK)
+METRICS = {"nse": "NSE", "pbias": "Percent bias (%)"}
 
 
-def row_positions(s):
-    """y position per row, with one blank row before each basin for its heading."""
-    ypos, y = {}, 0
-    for _, grp in s.groupby("name", sort=False):
-        y += 1
-        for i in grp.index:
-            ypos[i] = y
-            y += 1
-    return pd.Series(ypos), y
+def yearly_stats(y):
+    g = y.groupby("water_year")
+    cols = {"n": g.size()}
+    for m in METRICS:
+        cols.update({f"{m}_median": g[m].median(), f"{m}_q25": g[m].quantile(0.25),
+                     f"{m}_q75": g[m].quantile(0.75)})
+    return pd.DataFrame(cols)
 
 
-def plot_scores(s, out):
-    ypos, n = row_positions(s)
-    fig, (a1, a2) = plt.subplots(1, 2, sharey=True, figsize=(11, 0.28 * n + 1.6),
-                                 gridspec_kw={"width_ratios": [1, 1], "wspace": 0.08})
-    for ax in (a1, a2):
-        basin_bands(ax, s, ypos, None)
-        ax.grid(axis="y", visible=False)
+def gage_stats(y):
+    """Median yearly NSE per held-out inflow gage (pooled over basins it is an inflow to)."""
+    return (y.groupby(["inflow_gage", "inflow_name"])["nse"].agg(nse_median="median", n_years="size")
+            .reset_index().sort_values("nse_median", ascending=False))
 
-    nse = s["nse"].clip(lower=-1)
-    a1.hlines(ypos, -1, nse, color=GRID, lw=1, zorder=1)
-    a1.scatter(nse, ypos, s=36, color=BLUE, edgecolor=SURFACE, lw=1.5, zorder=3)
-    low = s["nse"] < -1
-    a1.scatter(np.full(low.sum(), -1), ypos[low], marker="<", s=40, color=BLUE, zorder=3)
-    for v in (0, 0.5):
-        a1.axvline(v, color=INK2, lw=0.8, ls=":" if v else "-", zorder=2)
-    a1.set_xlim(-1.05, 1.0)
-    a1.set_xlabel("NSE, daily  (◀ = below -1)")
 
-    lim = max(10, np.ceil(s["pbias"].abs().max() / 5) * 5)
-    a2.axvline(0, color=INK2, lw=0.8, zorder=2)
-    a2.hlines(ypos, 0, s["pbias"], color=BLUE, lw=2, zorder=3)
-    a2.scatter(s["pbias"], ypos, s=36, color=BLUE, edgecolor=SURFACE, lw=1.5, zorder=4)
-    a2.set_xlim(-lim, lim)
-    a2.set_xlabel("PBIAS, whole record (%)  (≈0 by construction)")
+def plot_map(ax, gstats):
+    """Inflow gages colored by median NSE over the UCRB, with the same simple layers as
+    plots/bigmap.jpg (scripts/v2/example_basin.py): basin outline, reservoirs > 0.5 km2,
+    Esri terrain + USGS hydrography tiles, north arrow, 100 km scale bar."""
+    import geopandas as gpd
+    import matplotlib.patches as mpatches
+    import numpy as np
 
-    a1.set_yticks(ypos.values, s["label"])
-    a1.set_ylim(n, 0)
-    # basin headings on the blank row above each group
-    for gname, grp in s.groupby("name", sort=False):
-        a1.text(-0.02, ypos[grp.index].min() - 0.75, f"{short(gname, 40)}  ({grp['gage'].iloc[0]})",
-                transform=a1.get_yaxis_transform(), ha="right", va="center",
-                fontsize=8.5, fontweight="bold", color=INK)
-    a1.tick_params(axis="y", length=0)
-    fig.suptitle("Ungaged-inflow scaling, leave-one-out: each inflow gage predicted from the "
-                 "others\n(% = mean share of the basin's natural flow in evaluated years)",
-                 x=0.01, ha="left", fontsize=10.5)
+    crs = "EPSG:3857"
+    ucol = gpd.read_parquet(C.UCOL_PATH).to_crs(crs)
+    res = gpd.read_parquet(C.RESERVOIRS_PATH)
+    res = res[res["areasqkm"] > 0.5].to_crs(crs)
+    res.geometry = res.geometry.make_valid()
+    gages = gpd.read_parquet(C.GAGES_PATH)
+    gages.index = gages.index.map(C.fix_gage_id)
+    pts = gages[["geometry"]].join(gstats.set_index("inflow_gage"), how="inner").to_crs(crs)
+
+    ucol.plot(ax=ax, facecolor="none", edgecolor="black", linewidth=2, zorder=3)
+    res.plot(ax=ax, edgecolor="cyan", facecolor="lightblue", linewidth=0.5, alpha=0.5, zorder=2)
+    pts = pts.sort_values("nse_median")
+    sc = ax.scatter(pts.geometry.x, pts.geometry.y, c=pts["nse_median"], cmap="viridis",
+                    vmin=0, vmax=1, s=60, edgecolor="black", linewidth=0.5, zorder=5)
+    try:
+        import contextily as cx
+        cx.add_basemap(ax, source=cx.providers.Esri.WorldTerrain, attribution=False)
+        cx.add_basemap(ax, source="https://basemap.nationalmap.gov/arcgis/rest/services/"
+                                  "USGSHydroCached/MapServer/tile/{z}/{y}/{x}", attribution=False)
+    except Exception as e:   # no contextily or no internet: plot without the basemap
+        print(f"basemap skipped: {e}")
+
+    ax.annotate("N", xy=(0.06, 0.95), xytext=(0.06, 0.88), xycoords="axes fraction",
+                arrowprops=dict(facecolor="black", width=3, headwidth=9), ha="center", va="center",
+                fontsize=12, fontweight="bold",
+                bbox=dict(boxstyle="circle,pad=0.2", facecolor="white", edgecolor="black", alpha=0.8))
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    lat = np.degrees(2 * np.arctan(np.exp((y0 + y1) / 2 / 6378137)) - np.pi / 2)
+    length = 100_000 / np.cos(np.radians(lat))   # 100 km on the ground in Web Mercator metres
+    sx, sy = x0 + (x1 - x0) * 0.05, y0 + (y1 - y0) * 0.04
+    ax.plot([sx, sx + length], [sy, sy], color="black", linewidth=3, zorder=6)
+    ax.text(sx + length / 2, sy + (y1 - y0) * 0.012, "100 km", ha="center", va="bottom",
+            fontsize=10, fontweight="bold", zorder=6,
+            bbox=dict(boxstyle="square,pad=0.15", facecolor="white", edgecolor="none", alpha=0.7))
+    ax.set_axis_off()
+    ax.legend(handles=[mpatches.Patch(facecolor="none", edgecolor="black", linewidth=2,
+                                      label="Upper Colorado Watershed"),
+                       mpatches.Patch(facecolor="lightblue", edgecolor="cyan", label="Major Reservoir")],
+              loc="lower right", framealpha=0.9)
+    return sc
+
+
+def plot_by_year(stats, gstats, out):
+    fig = plt.figure(figsize=(14, 9))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.2, 1])
+    axes = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0])]
+    for ax, (m, label) in zip(axes, METRICS.items()):
+        ax.fill_between(stats.index, stats[f"{m}_q25"], stats[f"{m}_q75"], alpha=0.3,
+                        label="interquartile range")
+        ax.plot(stats.index, stats[f"{m}_median"], label="median")
+        if m == "pbias":
+            ax.axhline(0, color="gray", lw=0.8)
+        ax.set_xlabel("Water year")
+        ax.set_ylabel(label)
+        ax.legend()
+
+    ax = fig.add_subplot(gs[:, 1])
+    sc = plot_map(ax, gstats)
+    fig.colorbar(sc, ax=ax, shrink=0.6, label="Median yearly NSE of held-out inflow gage")
+
+    fig.suptitle("Ungaged Inflows Leave-One-Out Validation")
+    fig.tight_layout()
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
-def plot_share(s, out):
-    fig, ax = plt.subplots(figsize=(6.5, 4.5))
-    ax.scatter(100 * s["mean_share"], s["nse"].clip(lower=-1), s=40, color=BLUE,
-               edgecolor=SURFACE, lw=1.5, zorder=3)
-    ax.axhline(0, color=INK2, lw=0.8)
-    ax.axvline(100 * 0.05, color=INK2, lw=0.8, ls=":")
-    ax.text(100 * 0.05, 1.0, " 5% cutoff", va="top", fontsize=8, color=INK2)
-    # label the weakest few so they can be found in the scores plot
-    for _, r in s.nsmallest(min(5, len(s)), "nse").iterrows():
-        ax.annotate(f"{r['inflow_gage']} @ {r['gage']}", (100 * r["mean_share"], max(r["nse"], -1)),
-                    xytext=(5, -3), textcoords="offset points", fontsize=7.5, color=INK2)
-    ax.set_xscale("log")
-    ax.set_xlim(4, 100)
-    ax.set_xticks([5, 10, 20, 50, 100], ["5", "10", "20", "50", "100"])
-    ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-    ax.set_xlabel("held-out gage's mean share of basin natural flow (%, log)")
-    ax.set_ylabel("NSE, daily (clipped at -1)")
-    ax.set_ylim(-1.05, 1.02)
-    ax.set_title("Does skill depend on how big the held-out piece is?", loc="left", fontsize=10.5)
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_yearly(s, y, out):
-    ypos, n = row_positions(s)
-    key = dict(zip(zip(s["gage"], s["inflow_gage"]), s.index))
-    y = y[y[["gage", "inflow_gage"]].apply(tuple, axis=1).isin(key)].copy()
-    y["row"] = [ypos[key[(g, i)]] for g, i in zip(y["gage"], y["inflow_gage"])]
-    lim = float(np.clip(np.nanpercentile(y["pbias"].abs(), 98) if len(y) else 50, 20, 200))
-
-    fig, ax = plt.subplots(figsize=(8.5, 0.28 * n + 1.6))
-    basin_bands(ax, s, ypos, None)
-    ax.grid(axis="y", visible=False)
-    ax.axvline(0, color=INK2, lw=0.8, zorder=2)
-    for row, grp in y.groupby("row"):
-        p = grp["pbias"].clip(-lim, lim)
-        q1, med, q3 = np.nanpercentile(p, [25, 50, 75])
-        ax.hlines(row, q1, q3, color=BLUE, lw=6, alpha=0.35, zorder=2)
-        jitter = np.random.default_rng(int(row)).uniform(-0.18, 0.18, len(p))
-        ax.scatter(p, row + jitter, s=10, color=BLUE, alpha=0.7, lw=0, zorder=3)
-        ax.vlines(med, row - 0.32, row + 0.32, color=INK, lw=1.5, zorder=4)
-    ax.set_yticks(ypos.values, s["label"])
-    ax.tick_params(axis="y", length=0)
-    for gname, grp in s.groupby("name", sort=False):
-        ax.text(-0.02, ypos[grp.index].min() - 0.75, f"{short(gname, 40)}  ({grp['gage'].iloc[0]})",
-                transform=ax.get_yaxis_transform(), ha="right", va="center",
-                fontsize=8.5, fontweight="bold", color=INK)
-    ax.set_ylim(n, 0)
-    ax.set_xlim(-lim * 1.05, lim * 1.05)
-    ax.set_xlabel(f"PBIAS per water year (%); dots = years, band = middle 50%, tick = median "
-                  f"(clipped at ±{lim:.0f})")
-    ax.set_title("Year-to-year volume error of the held-out prediction", loc="left", fontsize=10.5)
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_hydrographs(s, out):
+def plot_hydrographs(y, out):
     from matplotlib.backends.backend_pdf import PdfPages
     with PdfPages(out) as pdf:
-        for gage, grp in s.groupby("gage", sort=False):
-            path = C.NATURALIZED_FULL_DIR / f"{gage}.parquet"
-            if not path.exists():
-                print(f"  no {path.name}, skipping hydrographs for {gage}")
-                continue
-            df = pd.read_parquet(path).set_index("date")
-            for _, r in grp.iterrows():
-                ig = r["inflow_gage"]
+        for gage, grp in y.groupby("gage", sort=True):
+            df = pd.read_parquet(C.NATURALIZED_FULL_DIR / f"{gage}.parquet").set_index("date")
+            for ig, r in grp.groupby("inflow_gage"):
                 cols = [f"igage_{ig}", f"test_{ig}"]
                 if not set(cols) <= set(df.columns):
                     continue
                 d = df[cols].dropna(how="all")
                 fig, ax = plt.subplots(figsize=(11, 4))
-                ax.plot(d.index, d[cols[0]], color=BLUE, lw=1.2, label="observed (naturalized)")
-                ax.plot(d.index, d[cols[1]], color=ORANGE, lw=1.2, label="predicted from other inflows")
+                ax.plot(d.index, d[cols[0]], label="observed (naturalized)")
+                ax.plot(d.index, d[cols[1]], label="predicted from other inflows")
                 ax.set_ylabel("cfs")
-                ax.legend(loc="upper left", frameon=False)
-                ax.set_title(f"{short(r['inflow_name'], 60)} ({ig}) held out at "
-                             f"{short(r['name'], 60)} ({gage})\nNSE {r['nse']:.2f}, "
-                             f"PBIAS {r['pbias']:.1f}%, r {r['r']:.2f}, {r['n_years']} years, "
-                             f"mean share {100 * r['mean_share']:.0f}%", loc="left", fontsize=10)
+                ax.legend(loc="upper left")
+                ax.set_title(f"{r['inflow_name'].iloc[0]} ({ig}) held out at {r['name'].iloc[0]} "
+                             f"({gage})\nmedian yearly NSE {r['nse'].median():.2f} over "
+                             f"{len(r)} scored years (all predicted years shown)", loc="left")
                 pdf.savefig(fig, bbox_inches="tight")
                 plt.close(fig)
 
@@ -225,17 +174,23 @@ def main():
                    help="also write a PDF of daily observed vs predicted for every inflow gage")
     args = p.parse_args()
 
-    s, y = load()
-    C.VALIDATION_PLOT_DIR.mkdir(parents=True, exist_ok=True)
-    d = C.VALIDATION_PLOT_DIR
-    plot_scores(s, d / "inflow_validation_scores.png")
-    plot_share(s, d / "inflow_validation_share.png")
-    plot_yearly(s, y, d / "inflow_validation_yearly.png")
-    if args.hydrographs:
-        plot_hydrographs(s, d / "inflow_validation_hydrographs.pdf")
+    y = load()
+    if y.empty:
+        raise SystemExit("no gage-year is within the share bounds")
+    stats = yearly_stats(y)
+    gstats = gage_stats(y)
 
-    print(f"{len(s)} inflow gages in {s['gage'].nunique()} basins; "
-          f"median NSE {s['nse'].median():.2f}, {(s['nse'] < 0).sum()} below 0")
+    d = C.VALIDATION_PLOT_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    stats.to_csv(d / "inflow_validation_by_year_stats.csv")
+    gstats.to_csv(d / "inflow_validation_by_gage_stats.csv", index=False)
+    plot_by_year(stats, gstats, d / "inflow_validation_by_year.png")
+    if args.hydrographs:
+        plot_hydrographs(y, d / "inflow_validation_hydrographs.pdf")
+
+    print(f"{len(y)} gage-years ({y['inflow_gage'].nunique()} inflow gages, {y['gage'].nunique()} basins), "
+          f"water years {stats.index.min()}-{stats.index.max()}")
+    print(stats.round(2).to_string())
     print(f"plots in {d}")
 
 

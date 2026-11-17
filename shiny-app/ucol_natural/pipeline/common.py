@@ -42,7 +42,8 @@ NAT_RESULTS_PATH = DATA_DIR / "nat_results.csv"
 NHD_DIR = DATA_DIR / "nhd"                                # download_nhd.py (NHD HR flowlines)
 INFLOW_VALIDATION_PATH = DATA_DIR / "inflow_validation.csv"            # see naturalize.py
 INFLOW_VALIDATION_YEARLY_PATH = DATA_DIR / "inflow_validation_by_year.csv"
-VALIDATION_PLOT_DIR = DATA_DIR / "plots"                                  # plot_inflow_validation.py, dist2stream.py
+FRAC_IN_PATH = DATA_DIR / "frac_in.csv"                                  # naturalize.py
+VALIDATION_PLOT_DIR = DATA_DIR / "plots"                                  # plot_inflow_validation.py
 
 # Static inputs in spatial_data/
 BASINS_PATH = SPATIAL_DIR / "all_UCOL_basins.parquet"
@@ -63,6 +64,13 @@ USBR_NAT_FLOWS_PATH = SPATIAL_DIR / "usbr_nat_flows.csv"
 START_DATE = pd.Timestamp("1979-10-01")
 PROJ_CRS = 5070                 # projected CRS for areas and spatial joins
 CMS_TO_CFS = 35.3147
+
+# Below-reservoir leave-one-out validation (naturalize.py, plot_inflow_validation.py): only
+# score an inflow gage in water years when its share of the basin's estimated natural flow
+# is within these bounds. Above 50%, the other gages carry less than half the flow, so the
+# basin itself would fail naturalize.py's frac_in > 0.5 rule and not be naturalized.
+MIN_VALIDATION_SHARE = 0.10
+MAX_VALIDATION_SHARE = 0.50
 
 
 def end_date() -> pd.Timestamp:

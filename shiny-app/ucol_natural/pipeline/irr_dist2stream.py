@@ -1,6 +1,6 @@
 """
-Mean distance from irrigated land to the nearest stream, per basin (simpler replacement for
-dist2stream.py, which ran yearly IrrMapper on Earth Engine).
+Mean distance from irrigated land to the nearest stream, per basin (replaced an earlier
+Earth Engine version that ran yearly IrrMapper).
 
 One-off static input for the Glover return-flow lag in naturalize.py. Run locally:
 

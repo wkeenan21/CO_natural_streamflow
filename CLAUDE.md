@@ -53,7 +53,11 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
 - `naturalize.py`: port of workflow.py's "MERGE DIVERSIONS WITH STREAMFLOW" loop. Basins are
   processed smallest to largest; final `Q_NAT2_cfs` is kept in memory (`nat_store`) for
   below-reservoir basins. Below a reservoir, Q_NAT2 = sum of routed inflow Q_NAT2 / frac_in,
-  so each inflow carries its own basin's Glover lag. Reservoir basins with <= 10 years of
+  so each inflow carries its own basin's Glover lag. frac_in must be fitted on >= 10 good water
+  years where the whole inflow set and the outlet overlap (`MIN_INFLOW_YEARS`); otherwise the
+  shortest-record gage is dropped and the set reselected (Archuleta keeps Vallecito Creek instead
+  of Los Pinos at La Boca). frac_in > 1 is allowed (riparian ET, channel losses, unaccounted CU);
+  per basin-year values go to `pipeline/data/frac_in.csv`. The year loop runs over water years. Reservoir basins with <= 10 years of
   record (the workflow.py rule) get Q_NAT2 = NaN (`short_record_res`), and downstream basins
   fall back to other inflows (e.g. Farmington uses Archuleta + Animas instead of Bolack Ranch).
   Outputs: `timeseries/<gage>.parquet` (app columns), `timeseries/basin_info.csv` (app basin
@@ -62,11 +66,20 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
   `spatial_data/ucrb_diversion_master_table.parquet`. `--gages` runs a subset.
   Below-reservoir validation: each inflow gage is held out and predicted from the others
   (same dates as `frac_in`, per-year inflow set and `frac_covered`, skipped in years it carries
-  < 5% of the basin's estimated natural flow, `MIN_VALIDATION_SHARE`). NSE/PBIAS/r go to
+  < 10% or > 50% of the basin's estimated natural flow, `C.MIN/MAX_VALIDATION_SHARE` in
+  common.py; above 50% the other gages couldn't pass the frac_in > 0.5 rule). NSE/PBIAS/r go to
   `pipeline/data/inflow_validation.csv` (per basin + inflow gage) and
   `inflow_validation_by_year.csv`. Whole-record PBIAS is ~0 by construction (in-sample ratio).
-- `plot_inflow_validation.py`: plots those CSVs to `pipeline/data/plots/` (`--hydrographs`
-  adds a daily observed-vs-predicted PDF).
+  In-sample is intended (decided 2026-11-13): the method only reconstructs years that have
+  data, never predicts unseen years, and one year barely moves frac_in.
+- `plot_inflow_validation.py`: "Ungaged Inflows Leave-One-Out Validation" figure
+  (`pipeline/data/plots/inflow_validation_by_year.png`): median yearly NSE (top left) and percent
+  bias (bottom left) per water year with the IQR shaded, and a map (right; bigmap.jpg layers, Esri
+  terrain + USGS hydro tiles via contextily, skipped offline) of held-out inflow gages colored by
+  median yearly NSE. Numbers in `inflow_validation_by_year_stats.csv`
+  and `inflow_validation_by_gage_stats.csv`. Uses `inflow_validation_by_year.csv` filtered to the
+  share bounds, WY 1980-2026 and inflow gages with >= 5 scored years, so tightening them needs no naturalize.py rerun. `--hydrographs` adds a daily
+  observed-vs-predicted PDF.
 - `download_nhd.py` (one-off, run by Will): NHD HR flowlines for UCRB HU4s 1401-1408 from the
   USGS staged HU4 products (GeoPackage, else Shapefile; NHD is retired since 2023-10 but still
   hosted). Keeps every flowline type, labelled `flow_class` (stream_perennial / intermittent /
@@ -74,17 +87,8 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
   `pipeline/data/nhd/` (gitignored, large): per-HU4 and combined UCRB geoparquet,
   `basins/<gage>.parquet` clipped to each whole drainage, `basin_flowline_km.csv`.
   Artificial paths include wide mainstem river centerlines, so keep them with perennial streams.
-- `dist2stream.py` (one-off, Google Earth Engine, run by Will; login details at the top):
-  effective distance sqrt(mean d^2) from IrrMapper v1.2 irrigated pixels (1986-2024) to NHD
-  flowlines, per basin (whole drainage) and year; unmapped years get the basin median. Default
-  stream set `--classes stream_perennial canal_ditch artificial_path` (tag `art-can-per`); each
-  class is uploaded to EE once, so other sets only upload new classes. `submit` / `status` /
-  `collect` -> `spatial_data/basin_dist2stream_<tag>.csv` (+ `_by_year`), plots in
-  `pipeline/data/plots/`. Replaced `irrigation_distance.py` (WWF rivers). Not yet used by
-  naturalize.py (Will reviews results first; T and S come later).
-  Tested on gages 09149500 and 09251000 (inputs rebuilt from old output):
-  Q_NAT / Q_NAT2 / Q_NATUSBR match to rounding error.
-- `irr_dist2stream.py` (one-off, local, ~1 min): simpler replacement for dist2stream.py.
+- `irr_dist2stream.py` (one-off, local, ~1 min): replaced the earlier Earth Engine/IrrMapper
+  version (`dist2stream.py`, removed 2026-11-13).
   GMIA-NEXT 2024 irrigation probability (`spatial_data/GMIA-NEXT_prob_NAM1_2024_v0.tif`,
   irrigated = prob >= 50%, 2024 taken as representative) and NHD stream_perennial +
   artificial_path by default, `--classes` adds e.g. canal_ditch (saved as
@@ -108,10 +112,9 @@ python shiny-app/ucol_natural/pipeline/naturalize.py      # build timeseries/<ga
 Done on `cc`: moved v1 folders into `scripts/v1/`; added this file; built the pipeline; switched
 the app to parquet and relative paths. 2026-10-22: fixed the below-reservoir leave-one-out
 validation, added the 5% share rule, validation CSVs and `plot_inflow_validation.py`
-(stub-tested only; Q_NAT2/Q_NAT3 unchanged). Open question: make the validation out-of-sample
-(fit the ratio without the scored year).
+(stub-tested only; Q_NAT2/Q_NAT3 unchanged). Validation stays in-sample (see above).
 2026-10-23: added `download_nhd.py` (Will has run it for Lee's Ferry) and `dist2stream.py`
-(stub-tested with a fake `ee`; not yet run).
+(Earth Engine; later replaced by `irr_dist2stream.py` and removed).
 
 **Next steps**
 1. Will: copy the diversion inputs, set the API keys, and run `update_inputs.py` then
