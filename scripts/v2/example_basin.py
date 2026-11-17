@@ -57,7 +57,7 @@ lfs = 11
 tfs = 14
 xdim = 14  # Slightly widened for a 2x2 grid
 ydim = 12  # Height expanded for 2 rows
-year = 2012
+year = 2020
 
 # Load shared spatial data once
 gages = gpd.read_parquet(rf"{cwd}\shiny-app\ucol_natural\spatial_data\all_UCOL_gages.parquet").to_crs(epsg=4326)
@@ -463,6 +463,7 @@ for h, l in zip(point_handles, point_labels):
 ax.legend(handles=legend_handles, loc='lower right', frameon=True, facecolor='white', framealpha=0.9, fontsize=lfs)
 
 plt.show()
+plt.savefig(r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow\plots\bigmap.jpg')
 
 
 ###########
