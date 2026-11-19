@@ -99,6 +99,34 @@ def apply_glover_warmup(rf_series, kernel, warmup_years=3, cycle_days=365):
     return lagged[off: off + len(rf_series)]
 
 
+def recompute_irrigation(df, cu_old, cu_new, a_ft):
+    """Redo the standard method's irrigation step with a new CU factor and Glover distance.
+
+    Used by the app (user-adjusted parameters) on a timeseries/<gage>.parquet table. Needs only
+    the app columns: irrigation_cfs (= -cu_old * diversion), Q_NAT_cfs, Q_CU_cfs. Same algebra as
+    naturalize_gage: Q_NAT2 = (Q_NAT - irrigation CU) + diversion - Glover-lagged return flow,
+    floored at 0. Returns a copy with irrigation_cfs, Q_CU_cfs, Q_NAT_cfs, Q_NAT2_cfs replaced.
+    Only valid for standard-method basins (not below reservoirs).
+    """
+    df = df.copy()
+    if 'irrigation_cfs' not in df.columns or not cu_old:
+        return df
+    irr_old = df['irrigation_cfs']
+    diversion = -irr_old / cu_old                     # raw irrigation diversion (positive)
+    q_noag = df['Q_NAT_cfs'] + irr_old                # natural flow without the irrigation terms
+    irr_new = -cu_new * diversion
+    kernel = glover_unit_response(np.arange(GLOVER_MAX_LAG_DAYS), a_ft, GLOVER_T, GLOVER_S)
+    if np.sum(kernel) > 0:
+        kernel = kernel / np.sum(kernel)
+    rf = (diversion * (1 - cu_new)).fillna(0).values
+    lagged = apply_glover_warmup(rf, kernel, warmup_years=3, cycle_days=365)
+    df['irrigation_cfs'] = irr_new
+    df['Q_CU_cfs'] = df['Q_CU_cfs'] - irr_old + irr_new
+    df['Q_NAT_cfs'] = q_noag - irr_new
+    df['Q_NAT2_cfs'] = (q_noag + diversion - lagged).clip(lower=0)
+    return df
+
+
 def mass_balance_compare(s1, s2):
     """sum(s1) / sum(s2) over dates where both are non-null."""
     combined = pd.concat([s1, s2], axis=1, join="inner").dropna()

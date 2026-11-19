@@ -1,0 +1,50 @@
+flowchart LR
+    subgraph S1 ["1. Basin order"]
+        direction TB
+        A1["Inputs: daily Q<sub>obs</sub>, diversion records Q<sub>div</sub>,<br/>reservoir evaporation E, irrigation efficiency η,<br/>basin boundaries"]
+        A2["Process basins from smallest (headwaters)<br/>to largest; each basin's final Q<sub>nat</sub> is kept<br/>as inflow for larger basins downstream"]
+        A3{"Observed streamflow<br/>available?"}
+        A4["Gap-fill Q<sub>obs</sub>"]
+        AX["No estimate"]
+        A1 --> A2 --> A3
+        A3 -- Yes --> A4
+        A3 -- No --> AX
+    end
+
+    subgraph S2 ["2. Add back consumptive use"]
+        direction TB
+        B1["Consumptive use of diversions:<br/>Q<sub>cu</sub> = η Q<sub>div,irr</sub> + 0.3 Q<sub>div,mun</sub> + Q<sub>div,ind</sub>"]
+        B2["Imports Q<sub>imp</sub> and exports Q<sub>exp</sub>;<br/>transfers with both ends in the basin cancel"]
+        B3["Q<sub>nat,1</sub> = Q<sub>obs</sub> + Q<sub>cu</sub> + E + Q<sub>exp</sub> − Q<sub>imp</sub>"]
+        B4{"Irrigation<br/>diversions?"}
+        B5["Lagged return flow (Glover):<br/>Q<sub>rf</sub>(t) = (1 − η) Σ<sub>τ</sub> g(τ) Q<sub>div,irr</sub>(t − τ)<br/><br/>Q<sub>nat</sub> = max[0, Q<sub>nat,1</sub> + (1 − η) Q<sub>div,irr</sub> − Q<sub>rf</sub>]"]
+        B6["Q<sub>nat</sub> = Q<sub>nat,1</sub>"]
+        B1 --> B2 --> B3 --> B4
+        B4 -- Yes --> B5
+        B4 -- No --> B6
+    end
+
+    subgraph S3 ["3. Basins below large reservoirs"]
+        direction TB
+        C1{"Smaller, already naturalized<br/>basins nested inside?"}
+        C2["For each water year: select non-overlapping<br/>inflow basins i, largest first, with at least<br/>90 percent of daily Q<sub>nat,i</sub> available"]
+        C3{"Inflow basins cover<br/>at least 1/3 of<br/>the basin area?"}
+        C4["Gaged inflow fraction:<br/>f<sub>in</sub> = Σ<sub>t</sub> Σ<sub>i</sub> Q<sub>nat,i</sub> / Σ<sub>t</sub> Q<sub>nat,1</sub>"]
+        C5{"f<sub>in</sub> > 0.5?"}
+        C6["Q<sub>nat</sub> = Σ<sub>i</sub> Q<sub>nat,i</sub> / f<sub>in</sub><br/>(replaces step 2; routed alternative<br/>uses Muskingum-routed Q<sub>nat,i</sub>)"]
+        C7["Leave-one-out validation:<br/>predict each inflow gage from the others"]
+        CX0["No estimate,<br/>all years"]
+        CX["No estimate,<br/>that water year"]
+        C1 -- Yes --> C2 --> C3
+        C1 -- No --> CX0
+        C3 -- Yes --> C4 --> C5
+        C3 -- No --> CX
+        C5 -- Yes --> C6 --> C7
+        C5 -- No --> CX
+    end
+
+    S1 -- "each basin with<br/>observed flow" --> S2
+    S2 -- "basin contains a reservoir<br/>over 3 km2 and has 10+<br/>years of record" --> S3
+
+    classDef fail fill:mistyrose,stroke:firebrick
+    class AX,CX0,CX fail

@@ -172,6 +172,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--hydrographs", action="store_true",
                    help="also write a PDF of daily observed vs predicted for every inflow gage")
+    p.add_argument("--out", type=Path,
+                   help="by-year figure path, .png or .pdf (default <VALIDATION_PLOT_DIR>/inflow_validation_by_year.png)")
     args = p.parse_args()
 
     y = load()
@@ -184,7 +186,7 @@ def main():
     d.mkdir(parents=True, exist_ok=True)
     stats.to_csv(d / "inflow_validation_by_year_stats.csv")
     gstats.to_csv(d / "inflow_validation_by_gage_stats.csv", index=False)
-    plot_by_year(stats, gstats, d / "inflow_validation_by_year.png")
+    plot_by_year(stats, gstats, args.out or d / "inflow_validation_by_year.png")
     if args.hydrographs:
         plot_hydrographs(y, d / "inflow_validation_hydrographs.pdf")
 

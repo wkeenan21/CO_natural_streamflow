@@ -55,9 +55,9 @@ def fix_gage_id(id_val):
 # --- Shared Setup & Parameters ---
 lfs = 11
 tfs = 14
-xdim = 14  # Slightly widened for a 2x2 grid
+xdim = 12  # Slightly widened for a 2x2 grid
 ydim = 12  # Height expanded for 2 rows
-year = 2020
+year = 2012
 
 # Load shared spatial data once
 gages = gpd.read_parquet(rf"{cwd}\shiny-app\ucol_natural\spatial_data\all_UCOL_gages.parquet").to_crs(epsg=4326)
@@ -267,66 +267,14 @@ for g_id, df_in in inflow_dfs.items():
     )
 
 ax4.plot(df_out.index, ungaged_inflow, label='Ungaged Inflow Q', color='orange', alpha=0.5, linewidth=2.0)
-
-if 'Q_NATUSBR_cfs' in df_out.columns:
-    ax4.plot(df_out.index, df_out['Q_NATUSBR_cfs'], label='USBR Natural Q', color='black', linestyle='--', linewidth=1.8)
-
 ax4.set_xlabel('Date')
 ax4.set_ylabel('Q (cfs)')
 ax4.grid(True)
 ax4.legend(loc='upper right', fontsize=lfs)
 ax4.set_title(f'D', loc='left', fontsize=tfs, fontweight='bold')
-
+fig.savefig(r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow\plots\san_juan_example.pdf')
 plt.show()
 
-####################
-# 2 panel
-####################
-fig1, (ax1, ax2) = plt.subplots(1, 2, figsize=(xdim, ydim), layout="constrained")
-
-fig1.suptitle(f'Upper San Juan Example Naturalization: Diversions', fontsize=tfs + 2, fontweight='bold')
-
-# -------------------------------------------------------------
-# Panel A: Diversion Watershed Map
-# -------------------------------------------------------------
-target_basin_div_3857.plot(ax=ax1, facecolor='none', edgecolor='black', linewidth=2, label='Watershed Boundary')
-target_gage_div_3857.plot(ax=ax1, color='blue', marker='^', markersize=120, zorder=5, label=f'Gage {gage_div}')
-
-irrigation_dvrs = dvrs_in_basin_3857[dvrs_in_basin_3857['siteUse'] == 'irrigation']
-transbasin_dvrs = dvrs_in_basin_3857[dvrs_in_basin_3857['siteUse'] == 'interbasin']
-
-irrigation_dvrs.plot(ax=ax1, color='orange', marker='o', markersize=40, alpha=0.8, zorder=4, label='Irrigation Diversion')
-transbasin_dvrs.plot(ax=ax1, color='red', marker='s', markersize=40, alpha=0.8, zorder=4, label='Transbasin Diversion')
-
-cx.add_basemap(ax1, source=cx.providers.USGS.USTopo)
-ax1.set_axis_off()
-ax1.legend(loc='upper right', frameon=True, facecolor='white', framealpha=0.9, fontsize=lfs)
-ax1.set_title(f'A: {gage_div}: Diversion Impacted', loc='left', fontsize=tfs, fontweight='bold')
-ax1.set_box_aspect(None)
-
-cx.add_basemap(ax1, source=cx.providers.Esri.WorldTerrain)
-usgs_hydro_wms = (
-    "https://basemap.nationalmap.gov/arcgis/rest/services/"
-    "USGSHydroCached/MapServer/tile/{z}/{y}/{x}"
-)
-cx.add_basemap(ax1, source=usgs_hydro_wms)
-
-# -------------------------------------------------------------
-# Panel B: Diversion Naturalization Graph
-# -------------------------------------------------------------
-ax2.plot(df_div.index, df_div['Q_cfs'], label='Observed Q', color='blue')
-ax2.plot(df_div.index, df_div['Q_NAT2_cfs'], label='Estimated Natural Q', color='green')
-ax2.plot(df_div.index, df_div['lagged_rf_cfs'] * -1, label='Return Flow Q', color='green', linestyle=':')
-ax2.plot(df_div.index, df_div['irrigation_diversion_cfs'], label='Irrigation Q', color='orange')
-ax2.plot(df_div.index, df_div['interbasin_cfs'], label='Transbasin Diversion Q', color='red')
-
-ax2.set_xlabel('Date')
-ax2.set_ylabel('Q (cfs)')
-ax2.grid(True)
-ax2.legend(fontsize=lfs)
-ax2.set_title(f'B', loc='left', fontsize=tfs, fontweight='bold')
-
-plt.show()
 ###############################################
 # BIG MAP
 ################################################

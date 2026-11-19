@@ -16,6 +16,12 @@ outputs are reused as static inputs. Only data that changes over time is automat
     reservoirs) and a Plotly hydrograph: observed (`Q_unfilled_*`), estimated natural
     (`Q_NAT2_*`), USBR natural (`Q_NATUSBR_*`), stacked consumptive use; CSV download.
     A "Basin details" card below both panels reads `timeseries/basin_info.csv`.
+    Standard-method basins with irrigation have "Adjust Parameters": users set the irrigation CU
+    factor (labeled "irrigation efficiency" in the app; same value) and irrigated-land-to-stream distance, and "Recompute Natural Flow" reruns the
+    irrigation step (`naturalize.recompute_irrigation`, same formula as the pipeline; reproduces
+    the stored Q_NAT2 to < 0.15 cfs with default values) on the full record. The plot shows the
+    default estimate dotted; the download carries the recomputed columns plus
+    `Q_NAT2_default_cfs`. Below-reservoir basins aren't adjustable yet. Runs in conda env `for_shiny`.
     Paths are relative to `app.py` (`APP_DIR`). It reads `timeseries/<gage>.parquet`
     and falls back to the old `<gage>.csv` when no parquet exists.
   - `pipeline/`: data pipeline (see below).

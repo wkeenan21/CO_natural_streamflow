@@ -84,6 +84,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--wy", type=int, default=2020, help="water year (Oct 1 - Sep 30)")
     p.add_argument("--gages", nargs="+", default=GAGES)
+    p.add_argument("--out", type=Path, help="output file, .png or .pdf (default plots/hydrographs_wy<year>.png)")
     args = p.parse_args()
 
     info = pd.read_csv(TS_DIR / "basin_info.csv", dtype={"gage": str}).set_index("gage")
@@ -119,8 +120,8 @@ def main():
                bbox_to_anchor=(0.5, 0.995), frameon=False)
     fig.subplots_adjust(top=0.935, bottom=0.05)
 
-    OUT_DIR.mkdir(exist_ok=True)
-    out = OUT_DIR / f"hydrographs_wy{args.wy}.png"
+    out = args.out or OUT_DIR / f"hydrographs_wy{args.wy}.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=200, bbox_inches="tight")
     print(f"wrote {out}")
 

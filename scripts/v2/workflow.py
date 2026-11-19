@@ -2707,3 +2707,7 @@ for e in epochs:
                 config_path = os.path.join(tcwd, f'batch{b}_hidden{h}_dropout{d_str}_epoch{e}.yml')
                 with open(config_path, 'w') as f:
                     yaml.safe_dump(config_data, f, default_flow_style=False)
+
+
+df = gpd.read_parquet(r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow\shiny-app\ucol_natural\spatial_data\UCOL.parquet')
+df.to_file(r'N:\Research\Kampf\Private\KeenanW\CO_natural_streamflow\UCOL.shp')

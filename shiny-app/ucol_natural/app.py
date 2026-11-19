@@ -11,8 +11,11 @@ import numpy as np
 import asyncio
 import shinyswatch
 from pathlib import Path
+import sys
 
 APP_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(APP_DIR / "pipeline"))
+from naturalize import recompute_irrigation   # same formula the pipeline uses
 SPATIAL_DIR = APP_DIR / "spatial_data"
 
 # 1. Load data
@@ -67,6 +70,17 @@ bounds = [[miny, minx], [maxy, maxx]]
 # Track the selected gage reactively and search status
 selected_gage = reactive.Value(None)
 search_error_msg = reactive.Value("")
+# user-adjusted parameters: {"gage", "cu", "a_ft"} or None (pipeline defaults)
+adjust_open = reactive.Value(False)
+custom_params = reactive.Value(None)
+M_TO_FT = 3.28084
+
+
+@reactive.effect
+@reactive.event(selected_gage)
+def _reset_adjustments():
+    adjust_open.set(False)
+    custom_params.set(None)
 
 # 2. Setup Page Layout
 ui.page_opts(title=ui.div(
@@ -397,6 +411,15 @@ with ui.layout_column_wrap(width=1/2, height="calc(100vh - 110px)", min_height="
             df['date'] = pd.to_datetime(df['date'])
             df.index = df['date']
 
+            # user-adjusted parameters: recompute on the full record (the Glover warm-up uses the
+            # first year), keep the pipeline estimate alongside for comparison
+            params = custom_params.get()
+            if params is not None and params['gage'] == gage and gage in basin_info.index:
+                default_nat2 = df['Q_NAT2_cfs'].copy()
+                df = recompute_irrigation(df, basin_info.loc[gage, 'irr_cu_factor'],
+                                          params['cu'], params['a_ft'])
+                df['Q_NAT2_default_cfs'] = default_nat2
+
             Q_col = f'Q_{unit_choice}'
             first_valid = df[Q_col].first_valid_index()
             last_valid = df[Q_col].last_valid_index()
@@ -508,6 +531,16 @@ with ui.layout_column_wrap(width=1/2, height="calc(100vh - 110px)", min_height="
                     subtitle=dict(text='NOTE: Not enough data for naturalization at this gage', font=dict(size=12))
                 else:
                     subtitle=dict()
+                if 'Q_NAT2_default_cfs' in df.columns:
+                    p = custom_params.get()
+                    fig.add_trace(go.Scatter(
+                        x=df['date'], y=df['Q_NAT2_default_cfs'], name='default natural flow estimate',
+                        mode='lines', line=dict(color='forestgreen', width=1.5, dash='dot'), opacity=0.6,
+                        hovertemplate='<b>default natural flow</b><br> %{y:.1f} ' + unit + '<extra></extra>'
+                    ))
+                    subtitle = dict(text=(f"Natural flow recomputed with irrigation efficiency {p['cu']:.2f} and "
+                                          f"{p['a_ft'] / M_TO_FT:,.0f} m irrigated land to stream "
+                                          "(dotted: default estimate)"), font=dict(size=12))
             else:
                 subtitle=dict()
 
@@ -569,7 +602,7 @@ with ui.card(fill=False):
             dist_note = f"mean over {b['irrigated_km2']:,.1f} km² irrigated (GMIA-NEXT 2024)"
         else:
             dist_note = "no irrigated land mapped; basin median used"
-        cu_note = "share of irrigation diversions consumed; the rest returns"
+        cu_note = "share of diverted water consumed by crops; the rest returns to the stream"
         if b['method'] != 'standard':
             # below reservoirs the estimate comes from the inflow basins and their own parameters
             unused = " (not used here: the estimate comes from the inflow basins)"
@@ -577,7 +610,7 @@ with ui.card(fill=False):
             cu_note += unused
         items = [
             info_item("Drainage area", f"{b['area_km2']:,.0f} km²"),
-            info_item("Irrigation consumptive use factor", f"{b['irr_cu_factor']:.2f}", cu_note),
+            info_item("Irrigation efficiency", f"{b['irr_cu_factor']:.2f}", cu_note),
             info_item("Irrigated land to stream", dist, dist_note),
             info_item("Diversion sites", f"{int(b['n_diversions'])}"),
         ]
@@ -606,3 +639,79 @@ with ui.card(fill=False):
                 ui.div(share, class_="text-muted", style="font-size: 0.75rem;") if share else None,
             ]
         return ui.div(*parts)
+
+    @render.ui
+    def adjust_panel():
+        gage_info = selected_gage.get()
+        if gage_info is None or str(gage_info['gage']) not in basin_info.index:
+            return None
+        gage = str(gage_info['gage'])
+        b = basin_info.loc[gage]
+        if b['method'] != 'standard':
+            return ui.div("Adjusting parameters is available for basins above reservoirs only.",
+                          class_="text-muted", style="font-size: 0.8rem; margin-top: 10px;")
+        if not has_irrigation(gage):
+            return ui.div("No irrigation diversions in this basin, so these parameters do not "
+                          "change its natural flow.", class_="text-muted",
+                          style="font-size: 0.8rem; margin-top: 10px;")
+        parts = [ui.input_action_button("adjust_btn", "Adjust Parameters", class_="btn-sm",
+                                        style="margin-top: 10px;")]
+        if adjust_open.get():
+            p = custom_params.get()
+            cu = p['cu'] if p else b['irr_cu_factor']
+            dist_m = (p['a_ft'] if p else b['glover_a_ft']) / M_TO_FT
+            parts.append(ui.div(
+                ui.input_numeric("adj_cu", "Irrigation efficiency (0-1)",
+                                 value=round(float(cu), 2), min=0, max=1, step=0.01),
+                ui.input_numeric("adj_dist_m", "Irrigated land to stream distance (m)",
+                                 value=round(float(dist_m)), min=1, step=10),
+                ui.div(
+                    ui.input_action_button("recompute_btn", "Recompute Natural Flow",
+                                           class_="btn-sm btn-primary"),
+                    ui.input_action_button("reset_btn", "Reset to defaults", class_="btn-sm"),
+                    style="display: flex; gap: 8px; align-items: end; margin-bottom: 1rem;",
+                ),
+                ui.div(f"Defaults: irrigation efficiency {b['irr_cu_factor']:.2f}, "
+                       f"{b['glover_a_ft'] / M_TO_FT:,.0f} m. The recomputed series is plotted and "
+                       "included in the download.", class_="text-muted",
+                       style="font-size: 0.75rem; width: 100%;"),
+                style="display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: end; margin-top: 8px;",
+            ))
+        return ui.div(*parts)
+
+
+def has_irrigation(gage):
+    path = ts_dir / f"{gage}.parquet"
+    if not path.exists():
+        return False
+    try:
+        irr = pd.read_parquet(path, columns=['irrigation_cfs'])['irrigation_cfs']
+    except Exception:   # no irrigation column
+        return False
+    return bool(irr.abs().sum() > 0)
+
+
+@reactive.effect
+@reactive.event(input.adjust_btn)
+def _toggle_adjust():
+    adjust_open.set(not adjust_open.get())
+
+
+@reactive.effect
+@reactive.event(input.recompute_btn)
+def _recompute():
+    gage_info = selected_gage.get()
+    cu, dist_m = input.adj_cu(), input.adj_dist_m()
+    if gage_info is None:
+        return
+    if cu is None or not 0 <= cu <= 1 or dist_m is None or dist_m <= 0:
+        ui.notification_show("Enter an irrigation efficiency between 0 and 1 and a distance above 0 m.",
+                             type="warning")
+        return
+    custom_params.set({"gage": str(gage_info['gage']), "cu": float(cu), "a_ft": float(dist_m) * M_TO_FT})
+
+
+@reactive.effect
+@reactive.event(input.reset_btn)
+def _reset_params():
+    custom_params.set(None)
