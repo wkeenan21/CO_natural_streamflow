@@ -410,6 +410,7 @@ for h, l in zip(point_handles, point_labels):
 
 ax.legend(handles=legend_handles, loc='lower right', frameon=True, facecolor='white', framealpha=0.9, fontsize=lfs)
 
+fig.savefig(r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow\plots\bigmap.pdf')
 plt.show()
 plt.savefig(r'C:\Users\C830645719\Documents\github-repos\CO_natural_streamflow\plots\bigmap.jpg')
 
